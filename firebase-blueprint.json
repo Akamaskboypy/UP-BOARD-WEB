@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "UserProgress": {
+      "title": "User Progress",
+      "description": "Stores the completion status of chapters for each user.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "object",
+          "description": "A map of chapter keys to boolean completion status."
+        }
+      },
+      "required": ["state"]
+    }
+  },
+  "firestore": {
+    "/artifacts/upboard-checklist/users/{userId}/progress/upboard_5subj_tasks": {
+      "schema": "UserProgress",
+      "description": "The progress document for a specific user."
+    }
+  }
+}
