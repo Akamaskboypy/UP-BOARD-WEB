@@ -6,12 +6,11 @@ interface SubjectCardProps {
   data: SubjectData;
   progress: { [key: string]: boolean };
   onToggle: (key: string) => void;
-  onOpenAI: (subject: string, chapter: string) => void;
   subjName: string;
 }
 
-export default function SubjectCard({ subj, data, progress, onToggle, onOpenAI, subjName }: SubjectCardProps) {
-  const getChapKey = (chapter: string) => `${subj}__${chapter.replace(/\s+/g, '_').replace(/[^\w_]/g, '')}`;
+export default function SubjectCard({ subj, data, progress, onToggle, subjName }: SubjectCardProps) {
+  const getChapKey = (chapter: string) => `${subj}__${chapter.trim().replace(/\s+/g, '_')}`;
 
   const branchColors = {
     physical: 'bg-[#e0f2fe] text-[#0369a1]',
@@ -53,12 +52,6 @@ export default function SubjectCard({ subj, data, progress, onToggle, onOpenAI, 
           <div key={k} className="flex items-center border-t border-[#f0f0f0]">
             <div className="flex-1 text-[11px] px-3.5 py-2.25 text-[#222] flex items-center justify-between">
               <span>{ch}</span>
-              <button
-                className="bg-linear-to-br from-[#8b5cf6] to-[#d946ef] text-white border-none rounded-xl px-2.5 py-1 text-[9px] font-bold cursor-pointer transition-all hover:scale-105 hover:shadow-[0_4px_12px_rgba(217,70,239,0.3)] flex items-center gap-1 tracking-wider uppercase"
-                onClick={() => onOpenAI(subjName, ch)}
-              >
-                ✨ AI
-              </button>
             </div>
             <div className="flex items-center justify-center w-[50px] py-2.25 border-l border-[#f0f0f0]">
               <input

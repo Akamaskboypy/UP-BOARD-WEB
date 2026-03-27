@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
-import { GoogleGenAI } from '@google/genai';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { SUBJECTS } from './constants';
 import { SubjectCode, ProgressState } from './types';
 import SubjectCard from './components/SubjectCard';
-import AIModal from './components/AIModal';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -27,11 +25,12 @@ export default function App() {
   });
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(isDummyConfig);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ 
     status: isDummyConfig ? 'synced' : 'connecting', 
     text: isDummyConfig ? 'Local Storage Active' : 'Connecting...' 
   });
-  const [aiModal, setAiModal] = useState({ isOpen: false, subject: '', chapter: '', content: '', isLoading: false });
 
   // Initialize Auth
   useEffect(() => {
@@ -44,11 +43,21 @@ export default function App() {
   }, []);
 
   const handleGoogleSignIn = async () => {
+    if (isSigningIn) return;
+    setIsSigningIn(true);
+    setAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in with Google:", error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        setAuthError("Sign-in popup was closed before completing. Please try again.");
+      } else {
+        setAuthError(error.message || "Failed to sign in. Please try again.");
+      }
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -98,28 +107,6 @@ export default function App() {
     saveToCloud(newState);
   };
 
-  const openAIGuide = async (subject: string, chapter: string) => {
-    setAiModal({ isOpen: true, subject, chapter, content: '', isLoading: true });
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Generate a quick study guide for the chapter "${chapter}" in the subject "${subject}" for UP Board Class 12.\n\nInclude strictly:\n1. ### Quick Summary\nA 2-3 sentence high-yield overview.\n2. ### Core Concepts to Memorize\n* 3-4 bullet points of formulas, definitions, or core facts.\n3. ### Test Yourself\nOne common exam-style question.`;
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          systemInstruction: "You are an expert tutor for UP Board Class 12. Return responses in clean Markdown format. Keep it concise, high-yield, and easy to read."
-        }
-      });
-
-      setAiModal(prev => ({ ...prev, content: response.text || 'No content generated.', isLoading: false }));
-    } catch (error) {
-      console.error("AI Error:", error);
-      setAiModal(prev => ({ ...prev, content: 'Error connecting to AI Tutor. Please try again later.', isLoading: false }));
-    }
-  };
-
   const getSubjectProgress = (subjId: string) => {
     const subj = SUBJECTS.find(s => s.id === subjId);
     if (!subj) return { n: 0, total: 0, pct: 0 };
@@ -129,7 +116,7 @@ export default function App() {
     subj.data.forEach(d => {
       d.chapters.forEach(ch => {
         total++;
-        const k = `${subjId}__${ch.replace(/\s+/g, '_').replace(/[^\w_]/g, '')}`;
+        const k = `${subjId}__${ch.trim().replace(/\s+/g, '_')}`;
         if (progress[k]) n++;
       });
     });
@@ -154,18 +141,32 @@ export default function App() {
           <h1 className="main-title text-3xl font-black mb-2">UP Board Class 12</h1>
           <p className="text-[13px] text-[#777]">Sign in to sync your progress across devices.</p>
         </div>
-        <button 
-          onClick={handleGoogleSignIn}
-          className="bg-white text-[#1a1a1a] font-bold py-3 px-6 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] transition-all flex items-center gap-3 cursor-pointer"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-          </svg>
-          Sign in with Google
-        </button>
+        
+        <div className="flex flex-col items-center gap-3">
+          <button 
+            onClick={handleGoogleSignIn}
+            disabled={isSigningIn}
+            className="bg-white text-[#1a1a1a] font-bold py-3 px-6 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] transition-all flex items-center gap-3 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSigningIn ? (
+              <div className="w-5 h-5 border-2 border-[#ddd] border-t-[#555] rounded-full animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+            )}
+            {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+          </button>
+          
+          {authError && (
+            <p className="text-xs text-[#ef4444] bg-[#fee2e2] px-3 py-1.5 rounded-md max-w-xs text-center">
+              {authError}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -227,7 +228,6 @@ export default function App() {
                 data={d}
                 progress={progress}
                 onToggle={handleToggle}
-                onOpenAI={openAIGuide}
                 subjName={SUBJECTS.find(s => s.id === activeTab)?.label.split(' ')[1] || ''}
               />
             </div>
@@ -252,15 +252,6 @@ export default function App() {
           </div>
         </motion.div>
       </AnimatePresence>
-
-      <AIModal
-        isOpen={aiModal.isOpen}
-        onClose={() => setAiModal(prev => ({ ...prev, isOpen: false }))}
-        subject={aiModal.subject}
-        chapter={aiModal.chapter}
-        content={aiModal.content}
-        isLoading={aiModal.isLoading}
-      />
     </div>
   );
 }
