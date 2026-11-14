@@ -350,7 +350,7 @@ export default function StudyTimerCalendarView({
     onAddManualLog({
       date: manualDate,
       subjectId: manualSubject,
-      chapter: manualChapter || undefined,
+      ...(manualChapter ? { chapter: manualChapter } : {}),
       durationSeconds: totalSecs,
       mode: 'manual',
     });
@@ -809,7 +809,7 @@ export default function StudyTimerCalendarView({
                   </button>
 
                   {(timerMode === 'stopwatch' || pomodoroPhase === 'focus') &&
-                    elapsedFocusSeconds >= 10 && (
+                    elapsedFocusSeconds >= 1 && (
                       <button
                         type="button"
                         onClick={onFinishAndLog}

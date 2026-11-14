@@ -587,9 +587,19 @@ export default function App() {
       localStorage.setItem('upboard_progress', JSON.stringify(newProgress));
       localStorage.setItem('upboard_study_logs', JSON.stringify(newLogs));
 
+      const sanitizedLogs: StudySessionLog[] = newLogs.map((l) => ({
+        id: String(l.id),
+        date: String(l.date),
+        subjectId: l.subjectId,
+        durationSeconds: Math.max(1, Math.round(Number(l.durationSeconds) || 0)),
+        mode: l.mode,
+        completedAt: String(l.completedAt),
+        ...(l.chapter ? { chapter: String(l.chapter) } : {}),
+      }));
+
       // Automatically update shared_progress/{token} in the background if a parent link exists
       if (tokenToUse) {
-        syncSharedProgressInBackground(tokenToUse, newProgress, newLogs);
+        syncSharedProgressInBackground(tokenToUse, newProgress, sanitizedLogs);
       }
 
       if (isDummyConfig) {
@@ -616,7 +626,7 @@ export default function App() {
           docRef,
           {
             state: newProgress,
-            studyLogs: newLogs,
+            studyLogs: sanitizedLogs,
             ...(tokenToUse ? { parentShareToken: tokenToUse } : {}),
           },
           { merge: true }
@@ -678,9 +688,13 @@ export default function App() {
     (entry: Omit<StudySessionLog, 'id' | 'completedAt'>) => {
       if (isParentView) return;
       const newLog: StudySessionLog = {
-        ...entry,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: entry.date,
+        subjectId: entry.subjectId,
+        durationSeconds: Math.max(1, Math.round(entry.durationSeconds)),
+        mode: entry.mode,
         completedAt: new Date().toISOString(),
+        ...(entry.chapter ? { chapter: entry.chapter } : {}),
       };
       const updated = [...studyLogsRef.current, newLog];
       setStudyLogs(updated);
@@ -722,7 +736,7 @@ export default function App() {
         appendStudyLog({
           date: getLocalDateString(),
           subjectId: timerSubject,
-          chapter: timerChapter || undefined,
+          ...(timerChapter ? { chapter: timerChapter } : {}),
           durationSeconds: targetSeconds,
           mode: 'pomodoro',
         });
@@ -773,12 +787,12 @@ export default function App() {
     setRunStartedAtMs(null);
     setAccumulatedSeconds(0);
 
-    if (durationToLog >= 10) {
+    if (durationToLog >= 1) {
       playCompletionChime();
       appendStudyLog({
         date: getLocalDateString(),
         subjectId: timerSubject,
-        chapter: timerChapter || undefined,
+        ...(timerChapter ? { chapter: timerChapter } : {}),
         durationSeconds: durationToLog,
         mode: timerMode,
       });
@@ -1524,7 +1538,7 @@ export default function App() {
                   )}
                 </button>
 
-                {elapsedFocusSeconds >= 10 && (
+                {elapsedFocusSeconds >= 1 && (
                   <button
                     type="button"
                     onClick={handleFinishAndLogSession}
