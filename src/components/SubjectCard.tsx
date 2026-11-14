@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Play } from 'lucide-react';
 import { SubjectData, SubjectCode } from '../types';
 
 export interface SubjectCardProps {
@@ -15,6 +15,16 @@ export interface SubjectCardProps {
   accentColor: string;
   isHighlighted?: boolean;
   inheritedSection?: string;
+  chapterStudySeconds?: Record<string, number>;
+  onStartChapterFocus?: (subj: SubjectCode, chapter: string) => void;
+}
+
+function formatCompactDuration(seconds: number): string {
+  if (!seconds || seconds < 60) return '';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
 }
 
 export default function SubjectCard({
@@ -31,6 +41,8 @@ export default function SubjectCard({
   accentColor,
   isHighlighted = false,
   inheritedSection,
+  chapterStudySeconds = {},
+  onStartChapterFocus,
 }: SubjectCardProps) {
   const getChapKey = (chapter: string) => `${subj}__${chapter.trim().replace(/\s+/g, '_')}`;
 
@@ -140,6 +152,7 @@ export default function SubjectCard({
             const k = getChapKey(ch);
             const isChecked = Boolean(progress[k]);
             const originalIndex = data.chapters.indexOf(ch) + 1;
+            const loggedTimeLabel = formatCompactDuration(chapterStudySeconds[`${subj}::${ch}`] || 0);
 
             return (
               <div
@@ -190,8 +203,29 @@ export default function SubjectCard({
                   </span>
                 </div>
 
-                {/* Right-Aligned Unboxed Status Text */}
-                <div className="flex items-center gap-2 shrink-0 text-xs font-mono tabular-nums">
+                {/* Right-Aligned Actions & Unboxed Metadata */}
+                <div className="flex items-center gap-3 shrink-0 text-xs font-mono tabular-nums">
+                  {loggedTimeLabel && (
+                    <span className="text-slate-500 dark:text-slate-400 hidden sm:inline">
+                      {loggedTimeLabel} studied
+                    </span>
+                  )}
+
+                  {onStartChapterFocus && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartChapterFocus(subj, ch);
+                      }}
+                      title={`Start focus timer for ${ch}`}
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all inline-flex items-center gap-1 text-[11px] font-sans font-medium cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current" />
+                      <span>Focus</span>
+                    </button>
+                  )}
+
                   <span
                     className={
                       isChecked

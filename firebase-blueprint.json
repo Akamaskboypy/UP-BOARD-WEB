@@ -2,12 +2,16 @@
   "entities": {
     "UserProgress": {
       "title": "User Progress",
-      "description": "Stores the completion status of chapters for each user.",
+      "description": "Stores the completion status of chapters and daily study session logs for each user.",
       "type": "object",
       "properties": {
         "state": {
           "type": "object",
           "description": "A map of chapter keys to boolean completion status."
+        },
+        "studyLogs": {
+          "type": "array",
+          "description": "Chronological list of completed Pomodoro and Stopwatch study sessions."
         }
       },
       "required": ["state"]
@@ -16,7 +20,7 @@
   "firestore": {
     "/artifacts/upboard-checklist/users/{userId}/progress/upboard_5subj_tasks": {
       "schema": "UserProgress",
-      "description": "The progress document for a specific user."
+      "description": "The progress and study log document for a specific user."
     }
   }
 }

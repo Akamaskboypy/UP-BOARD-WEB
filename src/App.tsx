@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
@@ -17,20 +17,37 @@ import {
 } from 'firebase/firestore';
 import {
   BookOpen,
+  CalendarClock,
+  Check,
   ChevronsDownUp,
   ChevronsUpDown,
   LogOut,
   Menu,
   Moon,
+  Pause,
+  Play,
   RotateCcw,
   Search,
   Sun,
+  Timer,
   X,
 } from 'lucide-react';
 import { SUBJECTS } from './constants';
-import { SubjectCode, ProgressState } from './types';
+import {
+  PomodoroPhase,
+  PomodoroPresetId,
+  ProgressState,
+  StudySessionLog,
+  SubjectCode,
+  TimerMode,
+} from './types';
 import SubjectCard from './components/SubjectCard';
 import AnalyticsInspector from './components/AnalyticsInspector';
+import StudyTimerCalendarView, {
+  formatClockDigits,
+  formatDurationHuman,
+  getLocalDateString,
+} from './components/StudyTimerCalendarView';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -90,12 +107,73 @@ function logFirestoreError(
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
+// Gentle Web Audio completion chime (no external audio files required)
+function playCompletionChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.14);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime + i * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.14 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.14);
+      osc.stop(ctx.currentTime + i * 0.14 + 0.45);
+    });
+  } catch {
+    // Ignore audio context restrictions
+  }
+}
+
+function getPresetDurations(
+  preset: PomodoroPresetId,
+  customFocus: number,
+  customBreak: number
+): { focus: number; shortBreak: number; longBreak: number } {
+  switch (preset) {
+    case '25-5':
+      return { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
+    case '50-10':
+      return { focus: 50 * 60, shortBreak: 10 * 60, longBreak: 20 * 60 };
+    case '90-15':
+      return { focus: 90 * 60, shortBreak: 15 * 60, longBreak: 30 * 60 };
+    case 'custom':
+      return {
+        focus: Math.max(1, customFocus) * 60,
+        shortBreak: Math.max(1, customBreak) * 60,
+        longBreak: Math.max(5, customBreak * 2) * 60,
+      };
+  }
+}
+
 export default function App() {
+  const [workspaceView, setWorkspaceView] = useState<'curriculum' | 'timer_calendar'>('curriculum');
   const [activeTab, setActiveTab] = useState<SubjectCode>('phy');
+
   const [progress, setProgress] = useState<ProgressState>(() => {
-    const saved = localStorage.getItem('upboard_progress');
-    return saved ? JSON.parse(saved) : {};
+    try {
+      const saved = localStorage.getItem('upboard_progress');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
   });
+
+  const [studyLogs, setStudyLogs] = useState<StudySessionLog[]>(() => {
+    try {
+      const saved = localStorage.getItem('upboard_study_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(isDummyConfig);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -123,6 +201,53 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [confirmResetSubject, setConfirmResetSubject] = useState(false);
 
+  // Persistent Drift-Free Timer Engine State
+  const [timerMode, setTimerMode] = useState<TimerMode>('pomodoro');
+  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('focus');
+  const [presetId, setPresetId] = useState<PomodoroPresetId>('25-5');
+  const [customFocusMins, setCustomFocusMins] = useState<number>(25);
+  const [customBreakMins, setCustomBreakMins] = useState<number>(5);
+  const [timerSubject, setTimerSubject] = useState<SubjectCode>('phy');
+  const [timerChapter, setTimerChapter] = useState<string>('');
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState<number>(0);
+  const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(null);
+  const [tickNowMs, setTickNowMs] = useState<number>(() => Date.now());
+
+  const durations = useMemo(
+    () => getPresetDurations(presetId, customFocusMins, customBreakMins),
+    [presetId, customFocusMins, customBreakMins]
+  );
+
+  const targetSeconds = useMemo(() => {
+    if (timerMode === 'stopwatch') return 0;
+    return durations[pomodoroPhase];
+  }, [timerMode, durations, pomodoroPhase]);
+
+  const totalElapsedSeconds = useMemo(() => {
+    if (!isRunning || !runStartedAtMs) return accumulatedSeconds;
+    const delta = Math.max(0, Math.floor((tickNowMs - runStartedAtMs) / 1000));
+    return accumulatedSeconds + delta;
+  }, [isRunning, runStartedAtMs, tickNowMs, accumulatedSeconds]);
+
+  const displaySeconds = useMemo(() => {
+    if (timerMode === 'stopwatch') {
+      return totalElapsedSeconds;
+    }
+    return Math.max(0, targetSeconds - totalElapsedSeconds);
+  }, [timerMode, totalElapsedSeconds, targetSeconds]);
+
+  const elapsedFocusSeconds = useMemo(() => {
+    if (timerMode === 'pomodoro' && pomodoroPhase !== 'focus') return 0;
+    return totalElapsedSeconds;
+  }, [timerMode, pomodoroPhase, totalElapsedSeconds]);
+
+  // Keep latest state refs for cloud sync inside timer completion callbacks
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const studyLogsRef = useRef(studyLogs);
+  studyLogsRef.current = studyLogs;
+
   // Sync dark mode class with documentElement
   useEffect(() => {
     if (darkMode) {
@@ -132,14 +257,6 @@ export default function App() {
     }
     localStorage.setItem('upboard_darkmode', JSON.stringify(darkMode));
   }, [darkMode]);
-
-  // Reset subject-specific filters when changing subject
-  const handleSelectSubject = (subjId: SubjectCode) => {
-    setActiveTab(subjId);
-    setBranchFilter('all');
-    setConfirmResetSubject(false);
-    setMobileSidebarOpen(false);
-  };
 
   // Validate connection to Firestore on boot
   useEffect(() => {
@@ -186,7 +303,7 @@ export default function App() {
     }
   };
 
-  // Sync with Firestore
+  // Sync both chapter progress (`state`) and study session logs (`studyLogs`) with Firestore
   useEffect(() => {
     if (isDummyConfig || !user || !isAuthReady || !db) return;
 
@@ -197,9 +314,16 @@ export default function App() {
     const unsubscribe = onSnapshot(
       docRef,
       (snap) => {
-        if (snap.exists() && snap.data().state) {
-          setProgress(snap.data().state);
-          localStorage.setItem('upboard_progress', JSON.stringify(snap.data().state));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.state) {
+            setProgress(data.state);
+            localStorage.setItem('upboard_progress', JSON.stringify(data.state));
+          }
+          if (Array.isArray(data.studyLogs)) {
+            setStudyLogs(data.studyLogs);
+            localStorage.setItem('upboard_study_logs', JSON.stringify(data.studyLogs));
+          }
           setSyncStatus({
             status: 'synced',
             text: `Synced · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
@@ -217,9 +341,11 @@ export default function App() {
     return () => unsubscribe();
   }, [user, isAuthReady]);
 
-  const saveToCloud = useCallback(
-    async (newState: ProgressState) => {
-      localStorage.setItem('upboard_progress', JSON.stringify(newState));
+  const saveWorkspaceToCloud = useCallback(
+    async (newProgress: ProgressState, newLogs: StudySessionLog[]) => {
+      localStorage.setItem('upboard_progress', JSON.stringify(newProgress));
+      localStorage.setItem('upboard_study_logs', JSON.stringify(newLogs));
+
       if (isDummyConfig) {
         setSyncStatus({
           status: 'synced',
@@ -240,7 +366,7 @@ export default function App() {
           'progress',
           'upboard_5subj_tasks'
         );
-        await setDoc(docRef, { state: newState }, { merge: true });
+        await setDoc(docRef, { state: newProgress, studyLogs: newLogs }, { merge: true });
         setSyncStatus({
           status: 'synced',
           text: `Synced · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
@@ -253,10 +379,141 @@ export default function App() {
     [user, isAuthReady]
   );
 
+  const appendStudyLog = useCallback(
+    (entry: Omit<StudySessionLog, 'id' | 'completedAt'>) => {
+      const newLog: StudySessionLog = {
+        ...entry,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        completedAt: new Date().toISOString(),
+      };
+      const updated = [...studyLogsRef.current, newLog];
+      setStudyLogs(updated);
+      saveWorkspaceToCloud(progressRef.current, updated);
+    },
+    [saveWorkspaceToCloud]
+  );
+
+  const handleDeleteStudyLog = useCallback(
+    (id: string) => {
+      const updated = studyLogsRef.current.filter((l) => l.id !== id);
+      setStudyLogs(updated);
+      saveWorkspaceToCloud(progressRef.current, updated);
+    },
+    [saveWorkspaceToCloud]
+  );
+
+  // Wall-clock 250ms tick interval for drift-free Pomodoro & Stopwatch tracking
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTickNowMs(now);
+    }, 250);
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  // Detect automatic Pomodoro countdown completion
+  useEffect(() => {
+    if (!isRunning || timerMode !== 'pomodoro') return;
+    if (totalElapsedSeconds >= targetSeconds && targetSeconds > 0) {
+      playCompletionChime();
+      setIsRunning(false);
+      setRunStartedAtMs(null);
+      setAccumulatedSeconds(0);
+
+      if (pomodoroPhase === 'focus') {
+        appendStudyLog({
+          date: getLocalDateString(),
+          subjectId: timerSubject,
+          chapter: timerChapter || undefined,
+          durationSeconds: targetSeconds,
+          mode: 'pomodoro',
+        });
+        setPomodoroPhase('shortBreak');
+      } else {
+        setPomodoroPhase('focus');
+      }
+    }
+  }, [
+    isRunning,
+    timerMode,
+    totalElapsedSeconds,
+    targetSeconds,
+    pomodoroPhase,
+    timerSubject,
+    timerChapter,
+    appendStudyLog,
+  ]);
+
+  // Timer Control Handlers
+  const handleStartPauseTimer = () => {
+    if (isRunning) {
+      // Pause
+      const now = Date.now();
+      const delta = runStartedAtMs ? Math.max(0, Math.floor((now - runStartedAtMs) / 1000)) : 0;
+      setAccumulatedSeconds((prev) => prev + delta);
+      setRunStartedAtMs(null);
+      setIsRunning(false);
+    } else {
+      // Start or Resume
+      const now = Date.now();
+      setTickNowMs(now);
+      setRunStartedAtMs(now);
+      setIsRunning(true);
+    }
+  };
+
+  const handleResetTimer = () => {
+    setIsRunning(false);
+    setRunStartedAtMs(null);
+    setAccumulatedSeconds(0);
+  };
+
+  const handleFinishAndLogSession = () => {
+    const durationToLog = elapsedFocusSeconds;
+    setIsRunning(false);
+    setRunStartedAtMs(null);
+    setAccumulatedSeconds(0);
+
+    if (durationToLog >= 10) {
+      playCompletionChime();
+      appendStudyLog({
+        date: getLocalDateString(),
+        subjectId: timerSubject,
+        chapter: timerChapter || undefined,
+        durationSeconds: durationToLog,
+        mode: timerMode,
+      });
+    }
+  };
+
+  const handleStartChapterFocusFromCard = (subj: SubjectCode, chapter: string) => {
+    // Reset current timer and immediately start focusing on this chapter
+    setTimerSubject(subj);
+    setTimerChapter(chapter);
+    if (timerMode === 'pomodoro' && pomodoroPhase !== 'focus') {
+      setPomodoroPhase('focus');
+    }
+    setAccumulatedSeconds(0);
+    const now = Date.now();
+    setTickNowMs(now);
+    setRunStartedAtMs(now);
+    setIsRunning(true);
+  };
+
+  // Reset subject-specific filters when changing subject
+  const handleSelectSubject = (subjId: SubjectCode) => {
+    setWorkspaceView('curriculum');
+    setActiveTab(subjId);
+    setBranchFilter('all');
+    setConfirmResetSubject(false);
+    setMobileSidebarOpen(false);
+  };
+
   const handleToggle = (key: string) => {
     const newState = { ...progress, [key]: !progress[key] };
     setProgress(newState);
-    saveToCloud(newState);
+    saveWorkspaceToCloud(newState, studyLogs);
   };
 
   const handleBulkToggle = (keys: string[], targetState: boolean) => {
@@ -265,7 +522,7 @@ export default function App() {
       newState[k] = targetState;
     });
     setProgress(newState);
-    saveToCloud(newState);
+    saveWorkspaceToCloud(newState, studyLogs);
   };
 
   const getSubjectProgress = useCallback(
@@ -321,6 +578,25 @@ export default function App() {
     return { doneCh, totalCh, pct, earnedMarks, totalMarks };
   }, [getSubjectProgress]);
 
+  // Compute today's total study seconds and per-chapter study seconds
+  const { todayStudySeconds, chapterStudySeconds } = useMemo(() => {
+    const todayStr = getLocalDateString();
+    let todaySec = 0;
+    const chapMap: Record<string, number> = {};
+
+    studyLogs.forEach((log) => {
+      if (log.date === todayStr) {
+        todaySec += log.durationSeconds;
+      }
+      if (log.chapter) {
+        const k = `${log.subjectId}::${log.chapter}`;
+        chapMap[k] = (chapMap[k] || 0) + log.durationSeconds;
+      }
+    });
+
+    return { todayStudySeconds: todaySec, chapterStudySeconds: chapMap };
+  }, [studyLogs]);
+
   const currentSubject = useMemo(
     () => SUBJECTS.find((s) => s.id === activeTab) || SUBJECTS[0],
     [activeTab]
@@ -332,6 +608,11 @@ export default function App() {
   );
 
   const activeAccent = darkMode ? currentSubject.darkAccent : currentSubject.lightAccent;
+  const timerSubjConfig = useMemo(
+    () => SUBJECTS.find((s) => s.id === timerSubject) || SUBJECTS[0],
+    [timerSubject]
+  );
+  const timerSubjAccent = darkMode ? timerSubjConfig.darkAccent : timerSubjConfig.lightAccent;
 
   // Compute filtered units and chapters for active subject
   const filteredUnits = useMemo(() => {
@@ -404,7 +685,7 @@ export default function App() {
   };
 
   const handleJumpToUnit = (unitIdx: number) => {
-    // Ensure unit is visible and expanded
+    setWorkspaceView('curriculum');
     if (statusFilter !== 'all' || branchFilter !== 'all' || searchQuery !== '') {
       setStatusFilter('all');
       setBranchFilter('all');
@@ -470,11 +751,11 @@ export default function App() {
             Academic Study Workspace · Class XII
           </div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 mb-2">
-            Sync your syllabus progress across devices
+            Sync your syllabus & daily study calendar
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-            Track chapter completion, monitor unit-wise exam mark weightage across Physics,
-            Chemistry, Mathematics, English, and Hindi, and pick up right where you left off.
+            Track chapter completion, log Pomodoro & Stopwatch study sessions into your daily
+            calendar, and monitor exam mark weightage across all 5 subjects.
           </p>
 
           <button
@@ -524,8 +805,8 @@ export default function App() {
               <div className="text-[11px] text-slate-500 dark:text-slate-400">Chapters & Topics</div>
             </div>
             <div>
-              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">394</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Tracked Marks</div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">25/5</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Pomodoro & Logs</div>
             </div>
           </div>
         </main>
@@ -540,7 +821,7 @@ export default function App() {
   // Sidebar Content (shared between desktop fixed sidebar and mobile drawer)
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full justify-between">
-      <div className="p-4 space-y-6 overflow-y-auto">
+      <div className="p-4 space-y-5 overflow-y-auto">
         {/* Brand Header */}
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -566,6 +847,54 @@ export default function App() {
               <X className="w-4 h-4" />
             </button>
           )}
+        </div>
+
+        {/* Dedicated Focus Timer & Daily Study Calendar Tab */}
+        <div>
+          <div className="px-2 mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            <span>Time & Daily Log</span>
+            <span className="font-mono">Today</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setWorkspaceView('timer_calendar');
+              setMobileSidebarOpen(false);
+            }}
+            className={`w-full px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer flex items-center justify-between gap-2 border ${
+              workspaceView === 'timer_calendar'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-transparent'
+                : 'bg-slate-50/80 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CalendarClock className="w-4 h-4 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-xs font-semibold truncate">Focus & Study Calendar</div>
+                <div
+                  className={`text-[10px] font-mono tabular-nums truncate ${
+                    workspaceView === 'timer_calendar'
+                      ? 'text-slate-300 dark:text-slate-600'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                >
+                  {isRunning
+                    ? `Running · ${formatClockDigits(displaySeconds)}`
+                    : 'Pomodoro · Stopwatch · Log'}
+                </div>
+              </div>
+            </div>
+
+            <span
+              className={`text-xs font-mono tabular-nums font-semibold shrink-0 ${
+                workspaceView === 'timer_calendar'
+                  ? 'text-emerald-300 dark:text-emerald-700'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
+              {formatDurationHuman(todayStudySeconds)}
+            </span>
+          </button>
         </div>
 
         {/* Overall Syllabus Readiness Summary */}
@@ -596,13 +925,13 @@ export default function App() {
         {/* 5 Subjects Navigation */}
         <div>
           <div className="px-2 mb-2 flex items-center justify-between text-[11px] font-medium text-slate-400 dark:text-slate-500">
-            <span>Subjects</span>
+            <span>Subjects Curriculum</span>
             <span className="font-mono">Completion</span>
           </div>
           <nav className="space-y-1">
             {SUBJECTS.map((s) => {
               const st = getSubjectProgress(s.id);
-              const isActive = activeTab === s.id;
+              const isActive = workspaceView === 'curriculum' && activeTab === s.id;
               const subjAccent = darkMode ? s.darkAccent : s.lightAccent;
 
               return (
@@ -658,7 +987,7 @@ export default function App() {
             <span>{currentSubject.name} Units</span>
             <span className="font-mono">Marks</span>
           </div>
-          <div className="space-y-0.5 max-h-56 overflow-y-auto pr-1">
+          <div className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
             {currentSubject.data.map((d, idx) => {
               const unitKeys = d.chapters.map(
                 (ch) => `${activeTab}__${ch.trim().replace(/\s+/g, '_')}`
@@ -759,7 +1088,7 @@ export default function App() {
 
       {/* Main Multi-Pane Workspace */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar Contract: Breadcrumb on Left, Primary Actions on Right */}
+        {/* Top Bar Contract: Breadcrumb on Left, Mini Header Timer & Actions on Right */}
         <header className="sticky top-0 z-30 h-14 px-4 md:px-6 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -772,31 +1101,97 @@ export default function App() {
             </button>
 
             {/* Contextual Breadcrumb */}
-            <div className="flex items-center gap-2 text-xs md:text-sm min-w-0">
-              <span className="text-slate-400 dark:text-slate-500 hidden sm:inline whitespace-nowrap">
-                Curriculum
-              </span>
-              <span
-                aria-hidden="true"
-                className="text-slate-300 dark:text-slate-700 hidden sm:inline"
-              >
-                /
-              </span>
-              <span className="font-display font-semibold text-slate-900 dark:text-slate-100 truncate">
-                {currentSubject.name}
-              </span>
-              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
-                ·
-              </span>
-              <span className="font-mono text-xs tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
-                {currentSubject.code}
-              </span>
-            </div>
+            {workspaceView === 'timer_calendar' ? (
+              <div className="flex items-center gap-2 text-xs md:text-sm min-w-0">
+                <span className="text-slate-400 dark:text-slate-500 hidden sm:inline whitespace-nowrap">
+                  Workspace
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="text-slate-300 dark:text-slate-700 hidden sm:inline"
+                >
+                  /
+                </span>
+                <span className="font-display font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  Focus Timer & Daily Study Calendar
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs md:text-sm min-w-0">
+                <span className="text-slate-400 dark:text-slate-500 hidden sm:inline whitespace-nowrap">
+                  Curriculum
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="text-slate-300 dark:text-slate-700 hidden sm:inline"
+                >
+                  /
+                </span>
+                <span className="font-display font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {currentSubject.name}
+                </span>
+                <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
+                  ·
+                </span>
+                <span className="font-mono text-xs tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+                  {currentSubject.code}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Right Workspace Actions */}
+          {/* Right Workspace Actions + Persistent Mini Header Timer */}
           <div className="flex items-center gap-2.5 shrink-0">
-            {currentSubjectStats.n > 0 && (
+            {/* Persistent Mini Header Timer Control */}
+            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 p-1 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setWorkspaceView('timer_calendar')}
+                title="Open Focus Timer & Study Calendar"
+                className="px-2 py-0.5 rounded flex items-center gap-1.5 text-xs hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Timer
+                  className="w-3.5 h-3.5 shrink-0"
+                  style={{ color: isRunning ? timerSubjAccent : undefined }}
+                />
+                <span
+                  className="hidden md:inline font-medium text-slate-600 dark:text-slate-300 max-w-[130px] truncate"
+                >
+                  {timerSubjConfig.name}
+                  {timerChapter ? ` · ${timerChapter}` : ''}
+                </span>
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
+                  {formatClockDigits(displaySeconds)}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStartPauseTimer}
+                aria-label={isRunning ? 'Pause timer' : 'Start timer'}
+                className="p-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
+              >
+                {isRunning ? (
+                  <Pause className="w-3 h-3 fill-current" />
+                ) : (
+                  <Play className="w-3 h-3 fill-current" />
+                )}
+              </button>
+
+              {elapsedFocusSeconds >= 10 && (
+                <button
+                  type="button"
+                  onClick={handleFinishAndLogSession}
+                  title="Finish & Log Session"
+                  className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700 transition-colors inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Check className="w-3 h-3" />
+                  <span className="hidden sm:inline">Log</span>
+                </button>
+              )}
+            </div>
+
+            {workspaceView === 'curriculum' && currentSubjectStats.n > 0 && (
               <>
                 {confirmResetSubject ? (
                   <div className="flex items-center gap-1.5">
@@ -819,10 +1214,10 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setConfirmResetSubject(true)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                    className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Reset Subject</span>
+                    <span className="hidden md:inline">Reset Subject</span>
                   </button>
                 )}
               </>
@@ -835,230 +1230,279 @@ export default function App() {
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              <span>{darkMode ? 'Light' : 'Dark'}</span>
+              <span className="hidden sm:inline">{darkMode ? 'Light' : 'Dark'}</span>
             </button>
           </div>
         </header>
 
         {/* Main Viewport Container */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] w-full mx-auto space-y-6">
-          {/* Subject Header & Telemetry Summary */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
-            <div>
-              {/* Unboxed Kicker Metadata */}
-              <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 mb-1">
-                <span>UP Board Class XII</span>
-                <span aria-hidden="true">·</span>
-                <span>{currentSubject.paperType}</span>
-                <span aria-hidden="true">·</span>
-                <span>{currentSubject.data.length} Units</span>
+          {workspaceView === 'timer_calendar' ? (
+            <StudyTimerCalendarView
+              darkMode={darkMode}
+              timerMode={timerMode}
+              onChangeTimerMode={(mode) => {
+                handleResetTimer();
+                setTimerMode(mode);
+              }}
+              pomodoroPhase={pomodoroPhase}
+              onChangePomodoroPhase={(phase) => {
+                handleResetTimer();
+                setPomodoroPhase(phase);
+              }}
+              presetId={presetId}
+              onChangePresetId={(preset) => {
+                handleResetTimer();
+                setPresetId(preset);
+              }}
+              customFocusMins={customFocusMins}
+              customBreakMins={customBreakMins}
+              onChangeCustomTimes={(fMins, bMins) => {
+                handleResetTimer();
+                setCustomFocusMins(fMins);
+                setCustomBreakMins(bMins);
+              }}
+              selectedSubject={timerSubject}
+              onChangeSelectedSubject={(subj) => {
+                setTimerSubject(subj);
+                setTimerChapter('');
+              }}
+              selectedChapter={timerChapter}
+              onChangeSelectedChapter={setTimerChapter}
+              isRunning={isRunning}
+              displaySeconds={displaySeconds}
+              targetSeconds={targetSeconds}
+              elapsedFocusSeconds={elapsedFocusSeconds}
+              onStartPause={handleStartPauseTimer}
+              onResetTimer={handleResetTimer}
+              onFinishAndLog={handleFinishAndLogSession}
+              studyLogs={studyLogs}
+              onAddManualLog={appendStudyLog}
+              onDeleteLog={handleDeleteStudyLog}
+            />
+          ) : (
+            <>
+              {/* Subject Header & Telemetry Summary */}
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  {/* Unboxed Kicker Metadata */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 mb-1">
+                    <span>UP Board Class XII</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{currentSubject.paperType}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{currentSubject.data.length} Units</span>
+                  </div>
+
+                  <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                    {currentSubject.name} Curriculum
+                  </h1>
+                </div>
+
+                {/* Right Quick Telemetry Figures */}
+                <div className="flex items-center gap-6 font-mono tabular-nums">
+                  <div>
+                    <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                      Chapters Completed
+                    </div>
+                    <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {currentSubjectStats.n}
+                      <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
+                        /{currentSubjectStats.total}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+
+                  <div>
+                    <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                      Estimated Marks
+                    </div>
+                    <div className="text-lg font-bold" style={{ color: activeAccent }}>
+                      {currentSubjectStats.earnedMarks}
+                      <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
+                        /{currentSubjectStats.totalMarks}M
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+
+                  <div>
+                    <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                      Completion
+                    </div>
+                    <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {currentSubjectStats.pct}%
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                {currentSubject.name} Curriculum
-              </h1>
-            </div>
-
-            {/* Right Quick Telemetry Figures */}
-            <div className="flex items-center gap-6 font-mono tabular-nums">
-              <div>
-                <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
-                  Chapters Completed
-                </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  {currentSubjectStats.n}
-                  <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
-                    /{currentSubjectStats.total}
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
-
-              <div>
-                <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
-                  Estimated Marks
-                </div>
-                <div className="text-lg font-bold" style={{ color: activeAccent }}>
-                  {currentSubjectStats.earnedMarks}
-                  <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
-                    /{currentSubjectStats.totalMarks}M
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
-
-              <div>
-                <div className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
-                  Completion
-                </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  {currentSubjectStats.pct}%
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Workspace Toolbar: Search, Status Segmented Control, Chemistry Branch Filter, Collapse Toggle */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-              {/* Live Search Input */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={`Search ${currentSubject.name} chapters or units...`}
-                  className="w-full pl-9 pr-8 py-1.5 text-xs md:text-sm bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear search"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Status Segmented Filter Controls */}
-              <div className="inline-flex items-center p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg self-start">
-                {(
-                  [
-                    { id: 'all', label: `All (${currentSubjectStats.total})` },
-                    {
-                      id: 'pending',
-                      label: `Remaining (${currentSubjectStats.total - currentSubjectStats.n})`,
-                    },
-                    { id: 'completed', label: `Completed (${currentSubjectStats.n})` },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setStatusFilter(tab.id)}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 font-mono tabular-nums ${
-                      statusFilter === tab.id
-                        ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 shadow-2xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Chemistry Branch Filter */}
-              {activeTab === 'chem' && (
-                <div className="inline-flex items-center p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg self-start">
-                  {(['all', 'Physical', 'Inorganic', 'Organic'] as const).map((branch) => (
-                    <button
-                      key={branch}
-                      type="button"
-                      onClick={() => setBranchFilter(branch)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                        branchFilter === branch
-                          ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      {branch === 'all' ? 'All Branches' : branch}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Expand / Collapse All Units Control */}
-            <button
-              type="button"
-              onClick={handleToggleAllUnits}
-              className="self-start lg:self-auto px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              {areAllCurrentCollapsed ? (
-                <>
-                  <ChevronsUpDown className="w-3.5 h-3.5" />
-                  <span>Expand All Units</span>
-                </>
-              ) : (
-                <>
-                  <ChevronsDownUp className="w-3.5 h-3.5" />
-                  <span>Collapse All Units</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Multi-Pane Grid: Primary Curriculum Grid (8 cols) + Right Analytics Inspector (4 cols) */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* Primary Curriculum Viewport */}
-            <div className="xl:col-span-8 space-y-3">
-              {filteredUnits.length === 0 ? (
-                <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-10 text-center">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-1">
-                    No matching chapters found
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                    Try adjusting your search query or switching the completion filter.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                      setBranchFilter('all');
-                    }}
-                    className="px-3.5 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-medium hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    Reset Filters
-                  </button>
-                </div>
-              ) : (
-                filteredUnits.map(({ idx, unitData, visibleChapters, inheritedSection }) => {
-                  const collapseKey = `${activeTab}-${idx}`;
-                  const isCollapsed = Boolean(collapsedUnits[collapseKey]);
-
-                  return (
-                    <SubjectCard
-                      key={collapseKey}
-                      id={`unit-card-${activeTab}-${idx}`}
-                      unitIndex={idx}
-                      subj={activeTab}
-                      data={unitData}
-                      visibleChapters={visibleChapters}
-                      progress={progress}
-                      onToggle={handleToggle}
-                      onBulkToggle={handleBulkToggle}
-                      isCollapsed={isCollapsed}
-                      onToggleCollapse={() =>
-                        setCollapsedUnits((prev) => ({
-                          ...prev,
-                          [collapseKey]: !prev[collapseKey],
-                        }))
-                      }
-                      accentColor={activeAccent}
-                      isHighlighted={highlightedUnit === idx}
-                      inheritedSection={inheritedSection}
+              {/* Workspace Toolbar: Search, Status Segmented Control, Chemistry Branch Filter, Collapse Toggle */}
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                  {/* Live Search Input */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={`Search ${currentSubject.name} chapters or units...`}
+                      className="w-full pl-9 pr-8 py-1.5 text-xs md:text-sm bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
                     />
-                  );
-                })
-              )}
-            </div>
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        aria-label="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
 
-            {/* Right Analytics & Exam Inspector Pane */}
-            <div className="xl:col-span-4 xl:sticky xl:top-20">
-              <AnalyticsInspector
-                subject={currentSubject}
-                progress={progress}
-                accentColor={activeAccent}
-                onJumpToUnit={handleJumpToUnit}
-              />
-            </div>
-          </div>
+                  {/* Status Segmented Filter Controls */}
+                  <div className="inline-flex items-center p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg self-start">
+                    {(
+                      [
+                        { id: 'all', label: `All (${currentSubjectStats.total})` },
+                        {
+                          id: 'pending',
+                          label: `Remaining (${currentSubjectStats.total - currentSubjectStats.n})`,
+                        },
+                        { id: 'completed', label: `Completed (${currentSubjectStats.n})` },
+                      ] as const
+                    ).map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setStatusFilter(tab.id)}
+                        className={`px-3 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 font-mono tabular-nums ${
+                          statusFilter === tab.id
+                            ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Chemistry Branch Filter */}
+                  {activeTab === 'chem' && (
+                    <div className="inline-flex items-center p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg self-start">
+                      {(['all', 'Physical', 'Inorganic', 'Organic'] as const).map((branch) => (
+                        <button
+                          key={branch}
+                          type="button"
+                          onClick={() => setBranchFilter(branch)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                            branchFilter === branch
+                              ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 shadow-2xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          {branch === 'all' ? 'All Branches' : branch}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Expand / Collapse All Units Control */}
+                <button
+                  type="button"
+                  onClick={handleToggleAllUnits}
+                  className="self-start lg:self-auto px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  {areAllCurrentCollapsed ? (
+                    <>
+                      <ChevronsUpDown className="w-3.5 h-3.5" />
+                      <span>Expand All Units</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronsDownUp className="w-3.5 h-3.5" />
+                      <span>Collapse All Units</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Multi-Pane Grid: Primary Curriculum Grid (8 cols) + Right Analytics Inspector (4 cols) */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                {/* Primary Curriculum Viewport */}
+                <div className="xl:col-span-8 space-y-3">
+                  {filteredUnits.length === 0 ? (
+                    <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-10 text-center">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-1">
+                        No matching chapters found
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                        Try adjusting your search query or switching the completion filter.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setStatusFilter('all');
+                          setBranchFilter('all');
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-medium hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  ) : (
+                    filteredUnits.map(({ idx, unitData, visibleChapters, inheritedSection }) => {
+                      const collapseKey = `${activeTab}-${idx}`;
+                      const isCollapsed = Boolean(collapsedUnits[collapseKey]);
+
+                      return (
+                        <SubjectCard
+                          key={collapseKey}
+                          id={`unit-card-${activeTab}-${idx}`}
+                          unitIndex={idx}
+                          subj={activeTab}
+                          data={unitData}
+                          visibleChapters={visibleChapters}
+                          progress={progress}
+                          onToggle={handleToggle}
+                          onBulkToggle={handleBulkToggle}
+                          isCollapsed={isCollapsed}
+                          onToggleCollapse={() =>
+                            setCollapsedUnits((prev) => ({
+                              ...prev,
+                              [collapseKey]: !prev[collapseKey],
+                            }))
+                          }
+                          accentColor={activeAccent}
+                          isHighlighted={highlightedUnit === idx}
+                          inheritedSection={inheritedSection}
+                          chapterStudySeconds={chapterStudySeconds}
+                          onStartChapterFocus={handleStartChapterFocusFromCard}
+                        />
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Right Analytics & Exam Inspector Pane */}
+                <div className="xl:col-span-4 xl:sticky xl:top-20">
+                  <AnalyticsInspector
+                    subject={currentSubject}
+                    progress={progress}
+                    accentColor={activeAccent}
+                    onJumpToUnit={handleJumpToUnit}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
