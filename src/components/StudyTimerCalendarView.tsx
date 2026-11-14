@@ -46,6 +46,7 @@ export interface StudyTimerCalendarViewProps {
   studyLogs: StudySessionLog[];
   onAddManualLog: (log: Omit<StudySessionLog, 'id' | 'completedAt'>) => void;
   onDeleteLog: (id: string) => void;
+  readOnly?: boolean;
 }
 
 export function getLocalDateString(date: Date = new Date()): string {
@@ -102,6 +103,7 @@ export default function StudyTimerCalendarView({
   studyLogs,
   onAddManualLog,
   onDeleteLog,
+  readOnly = false,
 }: StudyTimerCalendarViewProps) {
   const todayStr = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
@@ -190,7 +192,6 @@ export default function StudyTimerCalendarView({
     // Current consecutive daily study streak
     let streak = 0;
     const checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    // If nothing logged today yet, check starting from yesterday so ongoing streak is preserved
     if (!logsByDate[getLocalDateString(checkDate)]?.totalSeconds) {
       checkDate.setDate(checkDate.getDate() - 1);
     }
@@ -342,6 +343,7 @@ export default function StudyTimerCalendarView({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const totalSecs = manualHours * 3600 + manualMinutes * 60;
     if (totalSecs <= 0) return;
 
@@ -433,394 +435,396 @@ export default function StudyTimerCalendarView({
         </div>
       </div>
 
-      {/* Pomodoro & Stopwatch Focus Console */}
-      <section className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
-        {/* Top Mode & Preset Bar */}
-        <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          {/* Mode Switcher: Pomodoro vs Stopwatch */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
-              <button
-                type="button"
-                onClick={() => onChangeTimerMode('pomodoro')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  timerMode === 'pomodoro'
-                    ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Pomodoro Timer
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeTimerMode('stopwatch')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  timerMode === 'stopwatch'
-                    ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Open Stopwatch
-              </button>
-            </div>
-
-            {/* Pomodoro Presets */}
-            {timerMode === 'pomodoro' && (
-              <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-200/50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70">
-                {(
-                  [
-                    { id: '25-5', label: '25m / 5m' },
-                    { id: '50-10', label: '50m / 10m' },
-                    { id: '90-15', label: '90m / 15m' },
-                    { id: 'custom', label: 'Custom' },
-                  ] as const
-                ).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => onChangePresetId(p.id)}
-                    className={`px-2.5 py-1 rounded text-xs font-mono tabular-nums font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                      presetId === p.id
-                        ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+      {/* Pomodoro & Stopwatch Focus Console (Hidden in Read-Only Parent View) */}
+      {!readOnly && (
+        <section className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+          {/* Top Mode & Preset Bar */}
+          <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            {/* Mode Switcher: Pomodoro vs Stopwatch */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+                <button
+                  type="button"
+                  onClick={() => onChangeTimerMode('pomodoro')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    timerMode === 'pomodoro'
+                      ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Pomodoro Timer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeTimerMode('stopwatch')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    timerMode === 'stopwatch'
+                      ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Open Stopwatch
+                </button>
               </div>
-            )}
-          </div>
 
-          {/* Right Action: Log Offline Session Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowManualForm(!showManualForm)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{showManualForm ? 'Close Manual Log' : 'Log Past Session'}</span>
-          </button>
-        </div>
-
-        {/* Custom Duration Inputs (when Custom Pomodoro preset is active) */}
-        {timerMode === 'pomodoro' && presetId === 'custom' && (
-          <div className="px-4 py-2.5 bg-slate-50/40 dark:bg-slate-900/30 border-b border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs">
-            <span className="font-medium text-slate-600 dark:text-slate-400">
-              Custom Pomodoro Durations:
-            </span>
-            <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
-              <span>Focus (mins)</span>
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={customFocusMins}
-                onChange={(e) =>
-                  onChangeCustomTimes(
-                    Math.max(1, Math.min(180, Number(e.target.value) || 25)),
-                    customBreakMins
-                  )
-                }
-                className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
-              />
-            </label>
-            <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
-              <span>Break (mins)</span>
-              <input
-                type="number"
-                min={1}
-                max={60}
-                value={customBreakMins}
-                onChange={(e) =>
-                  onChangeCustomTimes(
-                    customFocusMins,
-                    Math.max(1, Math.min(60, Number(e.target.value) || 5))
-                  )
-                }
-                className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
-              />
-            </label>
-          </div>
-        )}
-
-        {/* Manual Past Session Entry Drawer */}
-        {showManualForm && (
-          <form
-            onSubmit={handleManualSubmit}
-            className="p-4 bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
-          >
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Study Date
-              </label>
-              <input
-                type="date"
-                value={manualDate}
-                max={todayStr}
-                onChange={(e) => setManualDate(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-slate-100"
-              />
+              {/* Pomodoro Presets */}
+              {timerMode === 'pomodoro' && (
+                <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-200/50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70">
+                  {(
+                    [
+                      { id: '25-5', label: '25m / 5m' },
+                      { id: '50-10', label: '50m / 10m' },
+                      { id: '90-15', label: '90m / 15m' },
+                      { id: 'custom', label: 'Custom' },
+                    ] as const
+                  ).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onChangePresetId(p.id)}
+                      className={`px-2.5 py-1 rounded text-xs font-mono tabular-nums font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        presetId === p.id
+                          ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Subject
-              </label>
-              <select
-                value={manualSubject}
-                onChange={(e) => {
-                  setManualSubject(e.target.value as SubjectCode);
-                  setManualChapter('');
-                }}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
-              >
-                {SUBJECTS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Chapter (Optional)
-              </label>
-              <select
-                value={manualChapter}
-                onChange={(e) => setManualChapter(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
-              >
-                <option value="">General Subject Study</option>
-                {manualChapters.map((ch) => (
-                  <option key={ch} value={ch}>
-                    {ch}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                  Hours
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={16}
-                  value={manualHours}
-                  onChange={(e) => setManualHours(Math.max(0, Number(e.target.value) || 0))}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                  Minutes
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={59}
-                  value={manualMinutes}
-                  onChange={(e) => setManualMinutes(Math.max(0, Number(e.target.value) || 0))}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
-                />
-              </div>
-            </div>
-
+            {/* Right Action: Log Offline Session Toggle */}
             <button
-              type="submit"
-              className="px-4 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-xs font-medium hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap h-[32px]"
+              type="button"
+              onClick={() => setShowManualForm(!showManualForm)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
-              Save Log Entry
+              <Plus className="w-3.5 h-3.5" />
+              <span>{showManualForm ? 'Close Manual Log' : 'Log Past Session'}</span>
             </button>
-          </form>
-        )}
+          </div>
 
-        {/* Main Timer Body */}
-        <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          {/* Left Column: Subject & Chapter Tagging */}
-          <div className="lg:col-span-5 space-y-4">
-            <div>
-              <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-1">
-                Active Study Target
-              </div>
-              <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
-                Link Session to Subject & Chapter
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Completed focus sessions are automatically logged to your daily calendar under this
-                subject.
-              </p>
+          {/* Custom Duration Inputs (when Custom Pomodoro preset is active) */}
+          {timerMode === 'pomodoro' && presetId === 'custom' && (
+            <div className="px-4 py-2.5 bg-slate-50/40 dark:bg-slate-900/30 border-b border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs">
+              <span className="font-medium text-slate-600 dark:text-slate-400">
+                Custom Pomodoro Durations:
+              </span>
+              <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                <span>Focus (mins)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={customFocusMins}
+                  onChange={(e) =>
+                    onChangeCustomTimes(
+                      Math.max(1, Math.min(180, Number(e.target.value) || 25)),
+                      customBreakMins
+                    )
+                  }
+                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
+                />
+              </label>
+              <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                <span>Break (mins)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={customBreakMins}
+                  onChange={(e) =>
+                    onChangeCustomTimes(
+                      customFocusMins,
+                      Math.max(1, Math.min(60, Number(e.target.value) || 5))
+                    )
+                  }
+                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
+                />
+              </label>
             </div>
+          )}
 
-            <div className="space-y-3">
+          {/* Manual Past Session Entry Drawer */}
+          {showManualForm && (
+            <form
+              onSubmit={handleManualSubmit}
+              className="p-4 bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+            >
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                  Study Date
+                </label>
+                <input
+                  type="date"
+                  value={manualDate}
+                  max={todayStr}
+                  onChange={(e) => setManualDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
                   Subject
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-                  {SUBJECTS.map((s) => {
-                    const isSelected = selectedSubject === s.id;
-                    const sAccent = darkMode ? s.darkAccent : s.lightAccent;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => onChangeSelectedSubject(s.id)}
-                        className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer truncate ${
-                          isSelected
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-transparent'
-                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                        }`}
-                        style={
-                          isSelected
-                            ? { backgroundColor: sAccent, color: darkMode ? '#0B0F17' : '#FFFFFF' }
-                            : undefined
-                        }
-                      >
-                        {s.name}
-                      </button>
-                    );
-                  })}
-                </div>
+                <select
+                  value={manualSubject}
+                  onChange={(e) => {
+                    setManualSubject(e.target.value as SubjectCode);
+                    setManualChapter('');
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                >
+                  {SUBJECTS.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label
-                  htmlFor="timer-chapter-select"
-                  className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1"
-                >
-                  Chapter / Topic
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                  Chapter (Optional)
                 </label>
                 <select
-                  id="timer-chapter-select"
-                  value={selectedChapter}
-                  onChange={(e) => onChangeSelectedChapter(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900 text-xs md:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600"
+                  value={manualChapter}
+                  onChange={(e) => setManualChapter(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
                 >
-                  <option value="">General {activeSubjectObj.name} Revision</option>
-                  {availableChapters.map((ch) => (
+                  <option value="">General Subject Study</option>
+                  {manualChapters.map((ch) => (
                     <option key={ch} value={ch}>
                       {ch}
                     </option>
                   ))}
                 </select>
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Hours
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={16}
+                    value={manualHours}
+                    onChange={(e) => setManualHours(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Minutes
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={manualMinutes}
+                    onChange={(e) => setManualMinutes(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-xs font-medium hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer whitespace-nowrap h-[32px]"
+              >
+                Save Log Entry
+              </button>
+            </form>
+          )}
+
+          {/* Main Timer Body */}
+          <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            {/* Left Column: Subject & Chapter Tagging */}
+            <div className="lg:col-span-5 space-y-4">
+              <div>
+                <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-1">
+                  Active Study Target
+                </div>
+                <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Link Session to Subject & Chapter
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Completed focus sessions are automatically logged to your daily calendar under
+                  this subject.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Subject
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                    {SUBJECTS.map((s) => {
+                      const isSelected = selectedSubject === s.id;
+                      const sAccent = darkMode ? s.darkAccent : s.lightAccent;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => onChangeSelectedSubject(s.id)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer truncate ${
+                            isSelected
+                              ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-transparent'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                          style={
+                            isSelected
+                              ? { backgroundColor: sAccent, color: darkMode ? '#0B0F17' : '#FFFFFF' }
+                              : undefined
+                          }
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="timer-chapter-select"
+                    className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1"
+                  >
+                    Chapter / Topic
+                  </label>
+                  <select
+                    id="timer-chapter-select"
+                    value={selectedChapter}
+                    onChange={(e) => onChangeSelectedChapter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900 text-xs md:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600"
+                  >
+                    <option value="">General {activeSubjectObj.name} Revision</option>
+                    {availableChapters.map((ch) => (
+                      <option key={ch} value={ch}>
+                        {ch}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Digital Clock Readout & Controls */}
+            <div className="lg:col-span-7 flex flex-col items-center lg:items-end justify-center">
+              <div className="w-full max-w-md bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl p-6 text-center space-y-4">
+                {/* Phase Switcher for Pomodoro */}
+                {timerMode === 'pomodoro' ? (
+                  <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-200/60 dark:bg-slate-800">
+                    {(
+                      [
+                        { id: 'focus', label: 'Focus Session' },
+                        { id: 'shortBreak', label: 'Short Break' },
+                        { id: 'longBreak', label: 'Long Break' },
+                      ] as const
+                    ).map((ph) => (
+                      <button
+                        key={ph.id}
+                        type="button"
+                        onClick={() => onChangePomodoroPhase(ph.id)}
+                        className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          pomodoroPhase === ph.id
+                            ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {ph.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                    Open-Ended Stopwatch · Logs Elapsed Study Time
+                  </div>
+                )}
+
+                {/* Unboxed Active Context Line */}
+                <div className="text-xs font-mono text-slate-500 dark:text-slate-400 truncate px-2">
+                  <span className="font-semibold" style={{ color: activeAccent }}>
+                    {activeSubjectObj.name}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  <span>{selectedChapter || 'General Revision'}</span>
+                </div>
+
+                {/* Giant Tabular-Nums Clock Display */}
+                <div className="font-mono tabular-nums text-5xl sm:text-6xl font-bold tracking-tight text-slate-900 dark:text-slate-100 py-1">
+                  {formatClockDigits(displaySeconds)}
+                </div>
+
+                {/* Progress Track */}
+                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full transition-all duration-200 rounded-full"
+                    style={{
+                      width: `${progressFraction}%`,
+                      backgroundColor:
+                        timerMode === 'pomodoro' && pomodoroPhase !== 'focus'
+                          ? '#10B981'
+                          : activeAccent,
+                    }}
+                  />
+                </div>
+
+                {/* Control Buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={onStartPause}
+                    className="px-5 py-2.5 rounded-lg font-medium text-xs sm:text-sm text-white dark:text-slate-950 transition-opacity hover:opacity-95 inline-flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                    style={{
+                      backgroundColor: activeAccent,
+                    }}
+                  >
+                    {isRunning ? (
+                      <>
+                        <Pause className="w-4 h-4 fill-current" />
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>{elapsedFocusSeconds > 0 ? 'Resume' : 'Start Timer'}</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onResetTimer}
+                    className="px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+
+                  {(timerMode === 'stopwatch' || pomodoroPhase === 'focus') &&
+                    elapsedFocusSeconds >= 10 && (
+                      <button
+                        type="button"
+                        onClick={onFinishAndLog}
+                        className="px-3.5 py-2.5 rounded-lg border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs sm:text-sm font-medium transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Finish & Log ({formatDurationHuman(elapsedFocusSeconds)})</span>
+                      </button>
+                    )}
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Right Column: Digital Clock Readout & Controls */}
-          <div className="lg:col-span-7 flex flex-col items-center lg:items-end justify-center">
-            <div className="w-full max-w-md bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl p-6 text-center space-y-4">
-              {/* Phase Switcher for Pomodoro */}
-              {timerMode === 'pomodoro' ? (
-                <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-200/60 dark:bg-slate-800">
-                  {(
-                    [
-                      { id: 'focus', label: 'Focus Session' },
-                      { id: 'shortBreak', label: 'Short Break' },
-                      { id: 'longBreak', label: 'Long Break' },
-                    ] as const
-                  ).map((ph) => (
-                    <button
-                      key={ph.id}
-                      type="button"
-                      onClick={() => onChangePomodoroPhase(ph.id)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                        pomodoroPhase === ph.id
-                          ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      {ph.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                  Open-Ended Stopwatch · Logs Elapsed Study Time
-                </div>
-              )}
-
-              {/* Unboxed Active Context Line */}
-              <div className="text-xs font-mono text-slate-500 dark:text-slate-400 truncate px-2">
-                <span className="font-semibold" style={{ color: activeAccent }}>
-                  {activeSubjectObj.name}
-                </span>
-                <span aria-hidden="true"> · </span>
-                <span>{selectedChapter || 'General Revision'}</span>
-              </div>
-
-              {/* Giant Tabular-Nums Clock Display */}
-              <div className="font-mono tabular-nums text-5xl sm:text-6xl font-bold tracking-tight text-slate-900 dark:text-slate-100 py-1">
-                {formatClockDigits(displaySeconds)}
-              </div>
-
-              {/* Progress Track */}
-              <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full transition-all duration-200 rounded-full"
-                  style={{
-                    width: `${progressFraction}%`,
-                    backgroundColor:
-                      timerMode === 'pomodoro' && pomodoroPhase !== 'focus'
-                        ? '#10B981'
-                        : activeAccent,
-                  }}
-                />
-              </div>
-
-              {/* Control Buttons */}
-              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={onStartPause}
-                  className="px-5 py-2.5 rounded-lg font-medium text-xs sm:text-sm text-white dark:text-slate-950 transition-opacity hover:opacity-95 inline-flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
-                  style={{
-                    backgroundColor: activeAccent,
-                  }}
-                >
-                  {isRunning ? (
-                    <>
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pause</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>{elapsedFocusSeconds > 0 ? 'Resume' : 'Start Timer'}</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onResetTimer}
-                  className="px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset</span>
-                </button>
-
-                {(timerMode === 'stopwatch' || pomodoroPhase === 'focus') &&
-                  elapsedFocusSeconds >= 10 && (
-                    <button
-                      type="button"
-                      onClick={onFinishAndLog}
-                      className="px-3.5 py-2.5 rounded-lg border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs sm:text-sm font-medium transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Finish & Log ({formatDurationHuman(elapsedFocusSeconds)})</span>
-                    </button>
-                  )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Calendar View Controls Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
@@ -829,7 +833,7 @@ export default function StudyTimerCalendarView({
             Daily Study Calendar & Activity Log
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Select any date on the monthly calendar or yearly heatmap to inspect your logged study
+            Select any date on the monthly calendar or yearly heatmap to inspect logged study
             sessions and subject distribution.
           </p>
         </div>
@@ -1162,16 +1166,18 @@ export default function StudyTimerCalendarView({
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Logged Sessions
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualDate(selectedDate);
-                    setShowManualForm(true);
-                  }}
-                  className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                >
-                  + Add entry
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualDate(selectedDate);
+                      setShowManualForm(true);
+                    }}
+                    className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    + Add entry
+                  </button>
+                )}
               </div>
 
               {selectedDayData.sessions.length === 0 ? (
@@ -1180,7 +1186,9 @@ export default function StudyTimerCalendarView({
                     No study sessions logged on this date
                   </p>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Start the Pomodoro or Stopwatch timer above, or add a past session manually.
+                    {readOnly
+                      ? 'Select another highlighted date on the calendar to view recorded study sessions.'
+                      : 'Start the Pomodoro or Stopwatch timer above, or add a past session manually.'}
                   </p>
                 </div>
               ) : (
@@ -1221,14 +1229,16 @@ export default function StudyTimerCalendarView({
                             <span className="text-xs font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">
                               {formatDurationHuman(sess.durationSeconds)}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteLog(sess.id)}
-                              title="Delete session log"
-                              className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-opacity cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteLog(sess.id)}
+                                title="Delete session log"
+                                className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-opacity cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

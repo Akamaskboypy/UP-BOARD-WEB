@@ -17,6 +17,7 @@ export interface SubjectCardProps {
   inheritedSection?: string;
   chapterStudySeconds?: Record<string, number>;
   onStartChapterFocus?: (subj: SubjectCode, chapter: string) => void;
+  readOnly?: boolean;
 }
 
 function formatCompactDuration(seconds: number): string {
@@ -43,6 +44,7 @@ export default function SubjectCard({
   inheritedSection,
   chapterStudySeconds = {},
   onStartChapterFocus,
+  readOnly = false,
 }: SubjectCardProps) {
   const getChapKey = (chapter: string) => `${subj}__${chapter.trim().replace(/\s+/g, '_')}`;
 
@@ -118,19 +120,21 @@ export default function SubjectCard({
           </div>
         </div>
 
-        {/* Right Controls: Tabular Progress + Bulk Unit Action */}
+        {/* Right Controls: Tabular Progress + Bulk Unit Action (hidden in readOnly Parent View) */}
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
             {completedInUnit}/{totalInUnit} done
           </span>
 
-          <button
-            type="button"
-            onClick={() => onBulkToggle(allUnitKeys, !isAllCompleted)}
-            className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-          >
-            {isAllCompleted ? 'Reset Unit' : 'Complete Unit'}
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => onBulkToggle(allUnitKeys, !isAllCompleted)}
+              className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              {isAllCompleted ? 'Reset Unit' : 'Complete Unit'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -153,6 +157,56 @@ export default function SubjectCard({
             const isChecked = Boolean(progress[k]);
             const originalIndex = data.chapters.indexOf(ch) + 1;
             const loggedTimeLabel = formatCompactDuration(chapterStudySeconds[`${subj}::${ch}`] || 0);
+
+            if (readOnly) {
+              return (
+                <div
+                  key={k}
+                  className={`flex items-center justify-between gap-4 px-4 min-h-[42px] py-2 text-sm transition-colors duration-150 ${
+                    isChecked
+                      ? 'bg-slate-50/40 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400'
+                      : 'text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {/* Chapter Index */}
+                    <span className="text-xs font-mono tabular-nums text-slate-400 dark:text-slate-500 w-6 shrink-0">
+                      {String(originalIndex).padStart(2, '0')}
+                    </span>
+
+                    {/* Chapter Name */}
+                    <span
+                      className={`truncate font-normal ${
+                        isChecked
+                          ? 'text-slate-600 dark:text-slate-300'
+                          : 'text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      {ch}
+                    </span>
+                  </div>
+
+                  {/* Right-Aligned Unboxed Status & Study Duration */}
+                  <div className="flex items-center gap-3 shrink-0 text-xs font-mono tabular-nums">
+                    {loggedTimeLabel && (
+                      <span className="text-slate-500 dark:text-slate-400 hidden sm:inline">
+                        {loggedTimeLabel} studied
+                      </span>
+                    )}
+                    <span
+                      className={
+                        isChecked
+                          ? 'text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      {isChecked && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+                      <span>{isChecked ? 'Completed' : 'Pending'}</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div

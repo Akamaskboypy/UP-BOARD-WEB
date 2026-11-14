@@ -2,7 +2,7 @@
   "entities": {
     "UserProgress": {
       "title": "User Progress",
-      "description": "Stores the completion status of chapters and daily study session logs for each user.",
+      "description": "Stores the completion status of chapters, daily study session logs, and active parent share token for each user.",
       "type": "object",
       "properties": {
         "state": {
@@ -12,15 +12,67 @@
         "studyLogs": {
           "type": "array",
           "description": "Chronological list of completed Pomodoro and Stopwatch study sessions."
+        },
+        "parentShareToken": {
+          "type": "string",
+          "description": "Random secret token for the read-only Parent View link."
         }
       },
       "required": ["state"]
+    },
+    "SharedProgress": {
+      "title": "Shared Parent Progress",
+      "description": "Anonymous read-only snapshot of study progress shared with parents via a secret token. Contains zero PII/email.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the student who owns this shared view (for write/delete rule enforcement only)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of the last progress update."
+        },
+        "overallReadiness": {
+          "type": "object",
+          "description": "Aggregate chapters and marks completion metrics across all subjects."
+        },
+        "subjectProgress": {
+          "type": "object",
+          "description": "Per-subject completion and marks readiness metrics."
+        },
+        "dailyStudyMinutes": {
+          "type": "object",
+          "description": "Map of YYYY-MM-DD dates to total minutes studied that day."
+        },
+        "state": {
+          "type": "object",
+          "description": "Map of chapter keys to boolean completion status."
+        },
+        "studyLogs": {
+          "type": "array",
+          "description": "Sanitized study session logs for calendar and heatmap visualization."
+        }
+      },
+      "required": [
+        "ownerId",
+        "updatedAt",
+        "overallReadiness",
+        "subjectProgress",
+        "dailyStudyMinutes",
+        "state",
+        "studyLogs"
+      ]
     }
   },
   "firestore": {
     "/artifacts/upboard-checklist/users/{userId}/progress/upboard_5subj_tasks": {
       "schema": "UserProgress",
-      "description": "The progress and study log document for a specific user."
+      "description": "The private progress and study log document for a specific user."
+    },
+    "/shared_progress/{token}": {
+      "schema": "SharedProgress",
+      "description": "Publicly readable (by secret token only), owner-writable study telemetry for Parent View."
     }
   }
 }

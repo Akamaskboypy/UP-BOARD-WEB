@@ -12,6 +12,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isValidToken(token) {
+      return token is string &&
+             token.size() >= 16 &&
+             token.size() <= 128 &&
+             token.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
     // ===============================================================
     // Data Model Validation
     // ===============================================================
@@ -20,8 +27,39 @@ service cloud.firestore {
              data.state is map;
     }
 
+    function isValidSharedProgress(data) {
+      return data.keys().hasAll([
+               'ownerId',
+               'updatedAt',
+               'overallReadiness',
+               'subjectProgress',
+               'dailyStudyMinutes',
+               'state',
+               'studyLogs'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerId',
+               'updatedAt',
+               'overallReadiness',
+               'subjectProgress',
+               'dailyStudyMinutes',
+               'state',
+               'studyLogs'
+             ]) &&
+             data.ownerId is string &&
+             data.ownerId == request.auth.uid &&
+             data.updatedAt is string &&
+             data.updatedAt.size() <= 64 &&
+             data.overallReadiness is map &&
+             data.subjectProgress is map &&
+             data.dailyStudyMinutes is map &&
+             data.state is map &&
+             data.studyLogs is list &&
+             data.studyLogs.size() <= 5000;
+    }
+
     // ===============================================================
-    // Rules
+    // Private Student Workspace Rules
     // ===============================================================
     match /artifacts/upboard-checklist/users/{userId}/progress/upboard_5subj_tasks {
       allow read: if isOwner(userId);
@@ -29,7 +67,31 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    // Default deny
+    // ===============================================================
+    // Read-Only Parent View Rules (Secret Token Access, Zero PII)
+    // ===============================================================
+    match /shared_progress/{token} {
+      // Anyone with the exact secret token link can read this single document without logging in
+      allow get: if isValidToken(token);
+      // Prevent enumerating or listing all shared links
+      allow list: if false;
+
+      // Only the authenticated student who owns this document can create, update, or reset/delete it
+      allow create: if isAuthenticated() &&
+                       isValidToken(token) &&
+                       isValidSharedProgress(request.resource.data);
+
+      allow update: if isAuthenticated() &&
+                       isValidToken(token) &&
+                       resource.data.ownerId == request.auth.uid &&
+                       isValidSharedProgress(request.resource.data);
+
+      allow delete: if isAuthenticated() &&
+                       isValidToken(token) &&
+                       resource.data.ownerId == request.auth.uid;
+    }
+
+    // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }

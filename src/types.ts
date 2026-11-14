@@ -30,3 +30,27 @@ export interface StudySessionLog {
   mode: TimerMode | 'manual';
   completedAt: string; // ISO timestamp
 }
+
+export interface SharedSubjectSummary {
+  done: number;
+  total: number;
+  pct: number;
+  earnedMarks: number;
+  totalMarks: number;
+}
+
+export interface SharedProgressDocument {
+  ownerId: string;
+  updatedAt: string;
+  overallReadiness: {
+    doneChapters: number;
+    totalChapters: number;
+    pct: number;
+    earnedMarks: number;
+    totalMarks: number;
+  };
+  subjectProgress: Record<string, SharedSubjectSummary>;
+  dailyStudyMinutes: Record<string, number>;
+  state: ProgressState;
+  studyLogs: StudySessionLog[];
+}

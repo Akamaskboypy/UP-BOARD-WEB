@@ -12,6 +12,7 @@ import {
   getFirestore,
   doc,
   setDoc,
+  deleteDoc,
   onSnapshot,
   getDocFromServer,
 } from 'firebase/firestore';
@@ -28,6 +29,9 @@ import {
   Play,
   RotateCcw,
   Search,
+  Share2,
+  ShieldAlert,
+  ShieldCheck,
   Sun,
   Timer,
   X,
@@ -37,6 +41,8 @@ import {
   PomodoroPhase,
   PomodoroPresetId,
   ProgressState,
+  SharedProgressDocument,
+  SharedSubjectSummary,
   StudySessionLog,
   SubjectCode,
   TimerMode,
@@ -48,6 +54,7 @@ import StudyTimerCalendarView, {
   formatDurationHuman,
   getLocalDateString,
 } from './components/StudyTimerCalendarView';
+import ShareWithParentsModal from './components/ShareWithParentsModal';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -107,10 +114,114 @@ function logFirestoreError(
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
+// Generate a cryptographically random 24-character alphanumeric token
+function generateRandomShareToken(length = 24): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const randomValues = new Uint8Array(length);
+  window.crypto.getRandomValues(randomValues);
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[randomValues[i] % chars.length];
+  }
+  return result;
+}
+
+// Build strictly anonymous SharedProgressDocument (Zero PII / Zero Email)
+function buildSharedProgressPayload(
+  ownerId: string,
+  progressState: ProgressState,
+  logs: StudySessionLog[]
+): SharedProgressDocument {
+  let doneChapters = 0;
+  let totalChapters = 0;
+  let totalEarnedMarks = 0;
+  let totalAllMarks = 0;
+  const subjectProgress: Record<string, SharedSubjectSummary> = {};
+
+  SUBJECTS.forEach((subj) => {
+    let sDone = 0;
+    let sTotal = 0;
+    let sEarnedMarks = 0;
+    let sTotalMarks = 0;
+
+    subj.data.forEach((unit) => {
+      const unitTotal = unit.chapters.length;
+      let unitDone = 0;
+      unit.chapters.forEach((ch) => {
+        sTotal++;
+        const k = `${subj.id}__${ch.trim().replace(/\s+/g, '_')}`;
+        if (progressState[k]) {
+          sDone++;
+          unitDone++;
+        }
+      });
+      const m = unit.marks || 0;
+      sTotalMarks += m;
+      if (unitTotal > 0) {
+        sEarnedMarks += (unitDone / unitTotal) * m;
+      }
+    });
+
+    const sPct = sTotal > 0 ? Math.round((sDone / sTotal) * 100) : 0;
+    subjectProgress[subj.id] = {
+      done: sDone,
+      total: sTotal,
+      pct: sPct,
+      earnedMarks: Math.round(sEarnedMarks),
+      totalMarks: sTotalMarks,
+    };
+
+    doneChapters += sDone;
+    totalChapters += sTotal;
+    totalEarnedMarks += Math.round(sEarnedMarks);
+    totalAllMarks += sTotalMarks;
+  });
+
+  const dailyStudyMinutes: Record<string, number> = {};
+  const dailySecondsAccumulator: Record<string, number> = {};
+  const sanitizedLogs: StudySessionLog[] = logs.slice(-2000).map((l) => {
+    dailySecondsAccumulator[l.date] = (dailySecondsAccumulator[l.date] || 0) + l.durationSeconds;
+    const cleanLog: StudySessionLog = {
+      id: String(l.id),
+      date: String(l.date),
+      subjectId: l.subjectId,
+      durationSeconds: Number(l.durationSeconds) || 0,
+      mode: l.mode,
+      completedAt: String(l.completedAt),
+    };
+    if (l.chapter) {
+      cleanLog.chapter = String(l.chapter);
+    }
+    return cleanLog;
+  });
+
+  Object.entries(dailySecondsAccumulator).forEach(([dateKey, secs]) => {
+    dailyStudyMinutes[dateKey] = Math.round(secs / 60);
+  });
+
+  return {
+    ownerId,
+    updatedAt: new Date().toISOString(),
+    overallReadiness: {
+      doneChapters,
+      totalChapters,
+      pct: totalChapters > 0 ? Math.round((doneChapters / totalChapters) * 100) : 0,
+      earnedMarks: totalEarnedMarks,
+      totalMarks: totalAllMarks,
+    },
+    subjectProgress,
+    dailyStudyMinutes,
+    state: progressState,
+    studyLogs: sanitizedLogs,
+  };
+}
+
 // Gentle Web Audio completion chime (no external audio files required)
 function playCompletionChime() {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
@@ -153,10 +264,21 @@ function getPresetDurations(
 }
 
 export default function App() {
+  // Detect /parent/[token] route
+  const parentRouteToken = useMemo(() => {
+    const match = window.location.pathname.match(/^\/parent\/([a-zA-Z0-9_-]+)\/?$/);
+    if (match && match[1]) return match[1];
+    const params = new URLSearchParams(window.location.search);
+    return params.get('parent');
+  }, []);
+
+  const isParentView = Boolean(parentRouteToken);
+
   const [workspaceView, setWorkspaceView] = useState<'curriculum' | 'timer_calendar'>('curriculum');
   const [activeTab, setActiveTab] = useState<SubjectCode>('phy');
 
   const [progress, setProgress] = useState<ProgressState>(() => {
+    if (isParentView) return {};
     try {
       const saved = localStorage.getItem('upboard_progress');
       return saved ? JSON.parse(saved) : {};
@@ -166,6 +288,7 @@ export default function App() {
   });
 
   const [studyLogs, setStudyLogs] = useState<StudySessionLog[]>(() => {
+    if (isParentView) return [];
     try {
       const saved = localStorage.getItem('upboard_study_logs');
       return saved ? JSON.parse(saved) : [];
@@ -174,8 +297,21 @@ export default function App() {
     }
   });
 
+  // Student's active Parent Share Token
+  const [parentShareToken, setParentShareToken] = useState<string | null>(() => {
+    if (isParentView) return null;
+    return localStorage.getItem('upboard_parent_token') || null;
+  });
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isUpdatingShareLink, setIsUpdatingShareLink] = useState(false);
+
+  // Parent View Loading / Not Found State
+  const [parentViewLoading, setParentViewLoading] = useState<boolean>(isParentView);
+  const [parentViewNotFound, setParentViewNotFound] = useState<boolean>(false);
+  const [parentLastUpdated, setParentLastUpdated] = useState<string | null>(null);
+
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(isDummyConfig);
+  const [isAuthReady, setIsAuthReady] = useState(isDummyConfig || isParentView);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
@@ -247,6 +383,8 @@ export default function App() {
   progressRef.current = progress;
   const studyLogsRef = useRef(studyLogs);
   studyLogsRef.current = studyLogs;
+  const parentShareTokenRef = useRef(parentShareToken);
+  parentShareTokenRef.current = parentShareToken;
 
   // Sync dark mode class with documentElement
   useEffect(() => {
@@ -273,15 +411,67 @@ export default function App() {
     testConnection();
   }, []);
 
-  // Initialize Auth
+  // Initialize Auth (for student workspace)
   useEffect(() => {
-    if (isDummyConfig) return;
+    if (isDummyConfig || isParentView) return;
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isParentView]);
+
+  // Subscribe to /shared_progress/{token} when in Parent View (no login required)
+  useEffect(() => {
+    if (!isParentView || !parentRouteToken) return;
+
+    if (isDummyConfig || !db) {
+      // LocalStorage fallback when running in local/dummy Firebase config
+      const savedShared = localStorage.getItem(`upboard_shared_${parentRouteToken}`);
+      if (savedShared) {
+        try {
+          const parsed = JSON.parse(savedShared) as SharedProgressDocument;
+          setProgress(parsed.state || {});
+          setStudyLogs(Array.isArray(parsed.studyLogs) ? parsed.studyLogs : []);
+          setParentLastUpdated(parsed.updatedAt || null);
+          setParentViewNotFound(false);
+        } catch {
+          setParentViewNotFound(true);
+        }
+      } else {
+        setParentViewNotFound(true);
+      }
+      setParentViewLoading(false);
+      return;
+    }
+
+    setParentViewLoading(true);
+    const sharedPath = `shared_progress/${parentRouteToken}`;
+    const sharedRef = doc(db, 'shared_progress', parentRouteToken);
+
+    const unsubscribe = onSnapshot(
+      sharedRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as SharedProgressDocument;
+          setProgress(data.state || {});
+          setStudyLogs(Array.isArray(data.studyLogs) ? data.studyLogs : []);
+          setParentLastUpdated(data.updatedAt || null);
+          setParentViewNotFound(false);
+        } else {
+          setParentViewNotFound(true);
+        }
+        setParentViewLoading(false);
+      },
+      (error) => {
+        logFirestoreError(error, OperationType.GET, sharedPath);
+        setParentViewNotFound(true);
+        setParentViewLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isParentView, parentRouteToken]);
 
   const handleGoogleSignIn = async () => {
     if (isSigningIn) return;
@@ -303,13 +493,21 @@ export default function App() {
     }
   };
 
-  // Sync both chapter progress (`state`) and study session logs (`studyLogs`) with Firestore
+  // Sync student's private workspace (`state`, `studyLogs`, `parentShareToken`) with Firestore
   useEffect(() => {
-    if (isDummyConfig || !user || !isAuthReady || !db) return;
+    if (isDummyConfig || isParentView || !user || !isAuthReady || !db) return;
 
     setSyncStatus({ status: 'syncing', text: 'Syncing...' });
     const docPath = `artifacts/upboard-checklist/users/${user.uid}/progress/upboard_5subj_tasks`;
-    const docRef = doc(db, 'artifacts', 'upboard-checklist', 'users', user.uid, 'progress', 'upboard_5subj_tasks');
+    const docRef = doc(
+      db,
+      'artifacts',
+      'upboard-checklist',
+      'users',
+      user.uid,
+      'progress',
+      'upboard_5subj_tasks'
+    );
 
     const unsubscribe = onSnapshot(
       docRef,
@@ -323,6 +521,10 @@ export default function App() {
           if (Array.isArray(data.studyLogs)) {
             setStudyLogs(data.studyLogs);
             localStorage.setItem('upboard_study_logs', JSON.stringify(data.studyLogs));
+          }
+          if (typeof data.parentShareToken === 'string' && data.parentShareToken) {
+            setParentShareToken(data.parentShareToken);
+            localStorage.setItem('upboard_parent_token', data.parentShareToken);
           }
           setSyncStatus({
             status: 'synced',
@@ -339,12 +541,56 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [user, isAuthReady]);
+  }, [user, isAuthReady, isParentView]);
+
+  // Background sync helper for shared_progress/{token}
+  const syncSharedProgressInBackground = useCallback(
+    async (
+      activeToken: string | null,
+      newProgress: ProgressState,
+      newLogs: StudySessionLog[]
+    ) => {
+      if (!activeToken || isParentView) return;
+      const ownerUid = user?.uid || 'local-user';
+      const payload = buildSharedProgressPayload(ownerUid, newProgress, newLogs);
+
+      localStorage.setItem(`upboard_shared_${activeToken}`, JSON.stringify(payload));
+
+      if (isDummyConfig || !user || !isAuthReady || !db) return;
+      const sharedPath = `shared_progress/${activeToken}`;
+      try {
+        await setDoc(doc(db, 'shared_progress', activeToken), payload);
+      } catch (e) {
+        logFirestoreError(e, OperationType.WRITE, sharedPath);
+      }
+    },
+    [user, isAuthReady, isParentView]
+  );
+
+  // Ensure existing parentShareToken document stays synced when student opens the app
+  useEffect(() => {
+    if (isParentView || !parentShareToken) return;
+    if (!isDummyConfig && (!user || !isAuthReady)) return;
+    syncSharedProgressInBackground(parentShareToken, progress, studyLogs);
+  }, [parentShareToken, user, isAuthReady, isParentView]);
 
   const saveWorkspaceToCloud = useCallback(
-    async (newProgress: ProgressState, newLogs: StudySessionLog[]) => {
+    async (
+      newProgress: ProgressState,
+      newLogs: StudySessionLog[],
+      overrideShareToken?: string | null
+    ) => {
+      if (isParentView) return;
+      const tokenToUse =
+        overrideShareToken !== undefined ? overrideShareToken : parentShareTokenRef.current;
+
       localStorage.setItem('upboard_progress', JSON.stringify(newProgress));
       localStorage.setItem('upboard_study_logs', JSON.stringify(newLogs));
+
+      // Automatically update shared_progress/{token} in the background if a parent link exists
+      if (tokenToUse) {
+        syncSharedProgressInBackground(tokenToUse, newProgress, newLogs);
+      }
 
       if (isDummyConfig) {
         setSyncStatus({
@@ -366,7 +612,15 @@ export default function App() {
           'progress',
           'upboard_5subj_tasks'
         );
-        await setDoc(docRef, { state: newProgress, studyLogs: newLogs }, { merge: true });
+        await setDoc(
+          docRef,
+          {
+            state: newProgress,
+            studyLogs: newLogs,
+            ...(tokenToUse ? { parentShareToken: tokenToUse } : {}),
+          },
+          { merge: true }
+        );
         setSyncStatus({
           status: 'synced',
           text: `Synced · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
@@ -376,11 +630,53 @@ export default function App() {
         setSyncStatus({ status: 'error', text: 'Save error' });
       }
     },
-    [user, isAuthReady]
+    [user, isAuthReady, isParentView, syncSharedProgressInBackground]
   );
+
+  // Generate a new secret parent link or reset/delete the existing one
+  const handleGenerateOrResetParentLink = useCallback(async () => {
+    if (isParentView || isUpdatingShareLink) return;
+    setIsUpdatingShareLink(true);
+    const oldToken = parentShareTokenRef.current;
+    const newToken = generateRandomShareToken(24);
+
+    try {
+      // 1. Delete old shared_progress document so the old link immediately stops working
+      if (oldToken) {
+        localStorage.removeItem(`upboard_shared_${oldToken}`);
+        if (!isDummyConfig && user && db) {
+          const oldPath = `shared_progress/${oldToken}`;
+          try {
+            await deleteDoc(doc(db, 'shared_progress', oldToken));
+          } catch (e) {
+            logFirestoreError(e, OperationType.DELETE, oldPath);
+          }
+        }
+      }
+
+      // 2. Save new token and create new shared_progress/{newToken} document
+      setParentShareToken(newToken);
+      parentShareTokenRef.current = newToken;
+      localStorage.setItem('upboard_parent_token', newToken);
+
+      await syncSharedProgressInBackground(newToken, progressRef.current, studyLogsRef.current);
+      await saveWorkspaceToCloud(progressRef.current, studyLogsRef.current, newToken);
+    } finally {
+      setIsUpdatingShareLink(false);
+    }
+  }, [isParentView, isUpdatingShareLink, user, syncSharedProgressInBackground, saveWorkspaceToCloud]);
+
+  // Automatically generate initial token when student opens "Share with Parents" modal for the first time
+  const handleOpenShareModal = () => {
+    setIsShareModalOpen(true);
+    if (!parentShareToken && !isUpdatingShareLink) {
+      handleGenerateOrResetParentLink();
+    }
+  };
 
   const appendStudyLog = useCallback(
     (entry: Omit<StudySessionLog, 'id' | 'completedAt'>) => {
+      if (isParentView) return;
       const newLog: StudySessionLog = {
         ...entry,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -390,31 +686,32 @@ export default function App() {
       setStudyLogs(updated);
       saveWorkspaceToCloud(progressRef.current, updated);
     },
-    [saveWorkspaceToCloud]
+    [saveWorkspaceToCloud, isParentView]
   );
 
   const handleDeleteStudyLog = useCallback(
     (id: string) => {
+      if (isParentView) return;
       const updated = studyLogsRef.current.filter((l) => l.id !== id);
       setStudyLogs(updated);
       saveWorkspaceToCloud(progressRef.current, updated);
     },
-    [saveWorkspaceToCloud]
+    [saveWorkspaceToCloud, isParentView]
   );
 
   // Wall-clock 250ms tick interval for drift-free Pomodoro & Stopwatch tracking
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning || isParentView) return;
     const interval = setInterval(() => {
       const now = Date.now();
       setTickNowMs(now);
     }, 250);
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, isParentView]);
 
   // Detect automatic Pomodoro countdown completion
   useEffect(() => {
-    if (!isRunning || timerMode !== 'pomodoro') return;
+    if (!isRunning || timerMode !== 'pomodoro' || isParentView) return;
     if (totalElapsedSeconds >= targetSeconds && targetSeconds > 0) {
       playCompletionChime();
       setIsRunning(false);
@@ -443,19 +740,19 @@ export default function App() {
     timerSubject,
     timerChapter,
     appendStudyLog,
+    isParentView,
   ]);
 
   // Timer Control Handlers
   const handleStartPauseTimer = () => {
+    if (isParentView) return;
     if (isRunning) {
-      // Pause
       const now = Date.now();
       const delta = runStartedAtMs ? Math.max(0, Math.floor((now - runStartedAtMs) / 1000)) : 0;
       setAccumulatedSeconds((prev) => prev + delta);
       setRunStartedAtMs(null);
       setIsRunning(false);
     } else {
-      // Start or Resume
       const now = Date.now();
       setTickNowMs(now);
       setRunStartedAtMs(now);
@@ -470,6 +767,7 @@ export default function App() {
   };
 
   const handleFinishAndLogSession = () => {
+    if (isParentView) return;
     const durationToLog = elapsedFocusSeconds;
     setIsRunning(false);
     setRunStartedAtMs(null);
@@ -488,7 +786,7 @@ export default function App() {
   };
 
   const handleStartChapterFocusFromCard = (subj: SubjectCode, chapter: string) => {
-    // Reset current timer and immediately start focusing on this chapter
+    if (isParentView) return;
     setTimerSubject(subj);
     setTimerChapter(chapter);
     if (timerMode === 'pomodoro' && pomodoroPhase !== 'focus') {
@@ -511,12 +809,14 @@ export default function App() {
   };
 
   const handleToggle = (key: string) => {
+    if (isParentView) return;
     const newState = { ...progress, [key]: !progress[key] };
     setProgress(newState);
     saveWorkspaceToCloud(newState, studyLogs);
   };
 
   const handleBulkToggle = (keys: string[], targetState: boolean) => {
+    if (isParentView) return;
     const newState = { ...progress };
     keys.forEach((k) => {
       newState[k] = targetState;
@@ -674,6 +974,7 @@ export default function App() {
   };
 
   const handleResetActiveSubject = () => {
+    if (isParentView) return;
     const allKeys: string[] = [];
     currentSubject.data.forEach((d) => {
       d.chapters.forEach((ch) => {
@@ -711,19 +1012,39 @@ export default function App() {
   };
 
   // Loading State
-  if (!isAuthReady) {
+  if (!isAuthReady || parentViewLoading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] flex flex-col items-center justify-center gap-3 p-6">
         <div className="w-6 h-6 border-2 border-slate-300 dark:border-slate-700 border-t-slate-900 dark:border-t-slate-100 rounded-full animate-spin" />
         <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-          Initializing study workspace...
+          {isParentView ? 'Loading shared student progress...' : 'Initializing study workspace...'}
         </p>
       </div>
     );
   }
 
-  // Academic SaaS Sign-In Gate (when Firebase Auth is active and user is not signed in)
-  if (!isDummyConfig && !user) {
+  // Invalid or Reset Parent Link Screen
+  if (isParentView && parentViewNotFound) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-8 text-center space-y-4">
+          <div className="w-10 h-10 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">
+            Parent View Link Inactive
+          </h1>
+          <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+            This shared progress link has been reset by the student or does not exist. Please ask
+            for the updated secret link to view live study progress.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Academic SaaS Sign-In Gate (only for Student Workspace when Firebase Auth is active)
+  if (!isParentView && !isDummyConfig && !user) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between p-6 md:p-10">
         {/* Top Bar */}
@@ -833,7 +1154,7 @@ export default function App() {
                 UP Board Class 12
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                Academic Workspace
+                {isParentView ? 'Parent View · Live Progress' : 'Academic Workspace'}
               </div>
             </div>
           </div>
@@ -849,7 +1170,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Dedicated Focus Timer & Daily Study Calendar Tab */}
+        {/* Dedicated Study Calendar & Time Log Tab */}
         <div>
           <div className="px-2 mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 dark:text-slate-500">
             <span>Time & Daily Log</span>
@@ -870,7 +1191,9 @@ export default function App() {
             <div className="flex items-center gap-2.5 min-w-0">
               <CalendarClock className="w-4 h-4 shrink-0" />
               <div className="min-w-0">
-                <div className="text-xs font-semibold truncate">Focus & Study Calendar</div>
+                <div className="text-xs font-semibold truncate">
+                  {isParentView ? 'Study Calendar & Logs' : 'Focus & Study Calendar'}
+                </div>
                 <div
                   className={`text-[10px] font-mono tabular-nums truncate ${
                     workspaceView === 'timer_calendar'
@@ -878,7 +1201,9 @@ export default function App() {
                       : 'text-slate-400 dark:text-slate-500'
                   }`}
                 >
-                  {isRunning
+                  {isParentView
+                    ? 'Daily Study Hours & History'
+                    : isRunning
                     ? `Running · ${formatClockDigits(displaySeconds)}`
                     : 'Pomodoro · Stopwatch · Log'}
                 </div>
@@ -1026,41 +1351,63 @@ export default function App() {
         </div>
       </div>
 
-      {/* Bottom Cloud Sync & Account Footer */}
-      <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                syncStatus.status === 'syncing' || syncStatus.status === 'connecting'
-                  ? 'bg-amber-500 animate-pulse'
-                  : syncStatus.status === 'synced'
-                  ? 'bg-emerald-500'
-                  : 'bg-red-500'
-              }`}
-            />
-            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {syncStatus.text}
-            </span>
+      {/* Bottom Footer: Parent View • Read-Only Badge OR Student Account & Cloud Sync */}
+      <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1.5">
+        {isParentView ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>Parent View • Read-Only</span>
+            </div>
+            {parentLastUpdated && (
+              <div className="text-[11px] font-mono tabular-nums text-slate-400 dark:text-slate-500 truncate">
+                Updated{' '}
+                {new Date(parentLastUpdated).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </div>
+            )}
           </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    syncStatus.status === 'syncing' || syncStatus.status === 'connecting'
+                      ? 'bg-amber-500 animate-pulse'
+                      : syncStatus.status === 'synced'
+                      ? 'bg-emerald-500'
+                      : 'bg-red-500'
+                  }`}
+                />
+                <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {syncStatus.text}
+                </span>
+              </div>
 
-          {!isDummyConfig && user && (
-            <button
-              type="button"
-              onClick={() => signOut(auth)}
-              title="Sign Out"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Sign Out</span>
-            </button>
-          )}
-        </div>
+              {!isDummyConfig && user && (
+                <button
+                  type="button"
+                  onClick={() => signOut(auth)}
+                  title="Sign Out"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              )}
+            </div>
 
-        {!isDummyConfig && user?.email && (
-          <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate font-mono">
-            {user.email}
-          </div>
+            {!isDummyConfig && user?.email && (
+              <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate font-mono">
+                {user.email}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -1088,7 +1435,7 @@ export default function App() {
 
       {/* Main Multi-Pane Workspace */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar Contract: Breadcrumb on Left, Mini Header Timer & Actions on Right */}
+        {/* Top Bar Contract: Breadcrumb on Left, Actions & Share with Parents + Theme on Right */}
         <header className="sticky top-0 z-30 h-14 px-4 md:px-6 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -1104,7 +1451,7 @@ export default function App() {
             {workspaceView === 'timer_calendar' ? (
               <div className="flex items-center gap-2 text-xs md:text-sm min-w-0">
                 <span className="text-slate-400 dark:text-slate-500 hidden sm:inline whitespace-nowrap">
-                  Workspace
+                  {isParentView ? 'Parent View' : 'Workspace'}
                 </span>
                 <span
                   aria-hidden="true"
@@ -1113,13 +1460,13 @@ export default function App() {
                   /
                 </span>
                 <span className="font-display font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  Focus Timer & Daily Study Calendar
+                  {isParentView ? 'Daily Study Calendar & Logs' : 'Focus Timer & Daily Study Calendar'}
                 </span>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs md:text-sm min-w-0">
                 <span className="text-slate-400 dark:text-slate-500 hidden sm:inline whitespace-nowrap">
-                  Curriculum
+                  {isParentView ? 'Parent View' : 'Curriculum'}
                 </span>
                 <span
                   aria-hidden="true"
@@ -1140,58 +1487,59 @@ export default function App() {
             )}
           </div>
 
-          {/* Right Workspace Actions + Persistent Mini Header Timer */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Persistent Mini Header Timer Control */}
-            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 p-1 gap-1.5">
-              <button
-                type="button"
-                onClick={() => setWorkspaceView('timer_calendar')}
-                title="Open Focus Timer & Study Calendar"
-                className="px-2 py-0.5 rounded flex items-center gap-1.5 text-xs hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Timer
-                  className="w-3.5 h-3.5 shrink-0"
-                  style={{ color: isRunning ? timerSubjAccent : undefined }}
-                />
-                <span
-                  className="hidden md:inline font-medium text-slate-600 dark:text-slate-300 max-w-[130px] truncate"
-                >
-                  {timerSubjConfig.name}
-                  {timerChapter ? ` · ${timerChapter}` : ''}
-                </span>
-                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
-                  {formatClockDigits(displaySeconds)}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleStartPauseTimer}
-                aria-label={isRunning ? 'Pause timer' : 'Start timer'}
-                className="p-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
-              >
-                {isRunning ? (
-                  <Pause className="w-3 h-3 fill-current" />
-                ) : (
-                  <Play className="w-3 h-3 fill-current" />
-                )}
-              </button>
-
-              {elapsedFocusSeconds >= 10 && (
+          {/* Right Workspace Actions + Share with Parents + Theme Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Persistent Mini Header Timer Control (Hidden in Read-Only Parent View) */}
+            {!isParentView && (
+              <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 p-1 gap-1.5">
                 <button
                   type="button"
-                  onClick={handleFinishAndLogSession}
-                  title="Finish & Log Session"
-                  className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700 transition-colors inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  onClick={() => setWorkspaceView('timer_calendar')}
+                  title="Open Focus Timer & Study Calendar"
+                  className="px-2 py-0.5 rounded flex items-center gap-1.5 text-xs hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <Check className="w-3 h-3" />
-                  <span className="hidden sm:inline">Log</span>
+                  <Timer
+                    className="w-3.5 h-3.5 shrink-0"
+                    style={{ color: isRunning ? timerSubjAccent : undefined }}
+                  />
+                  <span className="hidden xl:inline font-medium text-slate-600 dark:text-slate-300 max-w-[120px] truncate">
+                    {timerSubjConfig.name}
+                    {timerChapter ? ` · ${timerChapter}` : ''}
+                  </span>
+                  <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
+                    {formatClockDigits(displaySeconds)}
+                  </span>
                 </button>
-              )}
-            </div>
 
-            {workspaceView === 'curriculum' && currentSubjectStats.n > 0 && (
+                <button
+                  type="button"
+                  onClick={handleStartPauseTimer}
+                  aria-label={isRunning ? 'Pause timer' : 'Start timer'}
+                  className="p-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
+                >
+                  {isRunning ? (
+                    <Pause className="w-3 h-3 fill-current" />
+                  ) : (
+                    <Play className="w-3 h-3 fill-current" />
+                  )}
+                </button>
+
+                {elapsedFocusSeconds >= 10 && (
+                  <button
+                    type="button"
+                    onClick={handleFinishAndLogSession}
+                    title="Finish & Log Session"
+                    className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700 transition-colors inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span className="hidden sm:inline">Log</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Reset Subject Button (Hidden in Read-Only Parent View) */}
+            {!isParentView && workspaceView === 'curriculum' && currentSubjectStats.n > 0 && (
               <>
                 {confirmResetSubject ? (
                   <div className="flex items-center gap-1.5">
@@ -1214,15 +1562,28 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setConfirmResetSubject(true)}
-                    className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                    className="hidden md:inline-flex px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Reset Subject</span>
+                    <span className="hidden lg:inline">Reset Subject</span>
                   </button>
                 )}
               </>
             )}
 
+            {/* Share with Parents Button (Next to Light/Dark Toggle) */}
+            {!isParentView && (
+              <button
+                type="button"
+                onClick={handleOpenShareModal}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Share2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Share with Parents</span>
+              </button>
+            )}
+
+            {/* Light / Dark Theme Toggle */}
             <button
               type="button"
               onClick={() => setDarkMode(!darkMode)}
@@ -1234,6 +1595,17 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Share with Parents Popup Modal */}
+        {!isParentView && (
+          <ShareWithParentsModal
+            isOpen={isShareModalOpen}
+            onClose={() => setIsShareModalOpen(false)}
+            shareToken={parentShareToken}
+            isBusy={isUpdatingShareLink}
+            onGenerateOrResetLink={handleGenerateOrResetParentLink}
+          />
+        )}
 
         {/* Main Viewport Container */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] w-full mx-auto space-y-6">
@@ -1279,6 +1651,7 @@ export default function App() {
               studyLogs={studyLogs}
               onAddManualLog={appendStudyLog}
               onDeleteLog={handleDeleteStudyLog}
+              readOnly={isParentView}
             />
           ) : (
             <>
@@ -1485,6 +1858,7 @@ export default function App() {
                           inheritedSection={inheritedSection}
                           chapterStudySeconds={chapterStudySeconds}
                           onStartChapterFocus={handleStartChapterFocusFromCard}
+                          readOnly={isParentView}
                         />
                       );
                     })
