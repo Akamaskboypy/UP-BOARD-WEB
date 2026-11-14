@@ -1,4 +1,4 @@
-import { SubjectData } from './types';
+import { SubjectData, SubjectCode } from './types';
 
 export const PHY_DATA: SubjectData[] = [
   { sec: 'Section A (35 Marks)', unit: 'Unit 1 — Electrostatics', marks: 8, chapters: ['Electric Charges & Fields', 'Electrostatic Potential & Capacitance'] },
@@ -52,10 +52,72 @@ export const HIN_DATA: SubjectData[] = [
   { title: 'Sanskrit (संस्कृत दिगदर्शिका)', marks: 14, chapters: ['भोजस्यौदार्यम्', 'आत्मज्ञ एवं सर्वज्ञ', 'संस्कृतभाषाया: महत्त्वम्', 'जातक कथा', 'सुभाषितरत्नानि', 'महामना मालवीय:', 'पञ्चशील-सिद्धान्ता:'] },
 ];
 
-export const SUBJECTS = [
-  { id: 'phy', label: '⚡ Physics', color: '#1e3a5f', data: PHY_DATA },
-  { id: 'chem', label: '🧪 Chemistry', color: '#7b2d00', data: CHEM_DATA },
-  { id: 'math', label: '📐 Maths', color: '#4a1a6b', data: MATH_DATA },
-  { id: 'eng', label: '📖 English', color: '#0f766e', data: ENG_DATA },
-  { id: 'hin', label: '🇮🇳 Hindi', color: '#c2410c', data: HIN_DATA },
+export interface SubjectConfig {
+  id: SubjectCode;
+  name: string;
+  code: string;
+  label: string;
+  paperType: string;
+  lightAccent: string;
+  darkAccent: string;
+  color: string;
+  data: SubjectData[];
+}
+
+export const SUBJECTS: SubjectConfig[] = [
+  {
+    id: 'phy',
+    name: 'Physics',
+    code: 'PHY-101',
+    label: 'Physics',
+    paperType: '70 Marks Theory + 30 Practical',
+    lightAccent: '#2563EB',
+    darkAccent: '#60A5FA',
+    color: '#2563EB',
+    data: PHY_DATA,
+  },
+  {
+    id: 'chem',
+    name: 'Chemistry',
+    code: 'CHE-102',
+    label: 'Chemistry',
+    paperType: '70 Marks Theory + 30 Practical',
+    lightAccent: '#D97706',
+    darkAccent: '#FBBF24',
+    color: '#D97706',
+    data: CHEM_DATA,
+  },
+  {
+    id: 'math',
+    name: 'Mathematics',
+    code: 'MAT-103',
+    label: 'Mathematics',
+    paperType: '100 Marks Written Paper',
+    lightAccent: '#7C3AED',
+    darkAccent: '#A78BFA',
+    color: '#7C3AED',
+    data: MATH_DATA,
+  },
+  {
+    id: 'eng',
+    name: 'English',
+    code: 'ENG-104',
+    label: 'English',
+    paperType: '100 Marks Literature & Language',
+    lightAccent: '#0D9488',
+    darkAccent: '#2DD4BF',
+    color: '#0D9488',
+    data: ENG_DATA,
+  },
+  {
+    id: 'hin',
+    name: 'Hindi',
+    code: 'HIN-105',
+    label: 'Hindi',
+    paperType: 'Syllabus Core Sections (54 Marks)',
+    lightAccent: '#E11D48',
+    darkAccent: '#FB7185',
+    color: '#E11D48',
+    data: HIN_DATA,
+  },
 ];

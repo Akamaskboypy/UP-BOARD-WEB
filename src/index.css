@@ -1,82 +1,61 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap');
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-playfair: 'Playfair Display', serif;
-  --font-dm: 'DM Sans', sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
 :root {
-  --bg: #f0ece4;
-  --ink: #1a1a1a;
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --border-subtle: #E2E8F0;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
 }
 
 .dark {
-  --bg: #121212;
-  --ink: #e0e0e0;
+  --bg-canvas: #0B0F17;
+  --bg-surface: #111827;
+  --border-subtle: #1E293B;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
 }
 
 body {
-  font-family: var(--font-dm);
-  background: var(--bg);
-  color: var(--ink);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  font-family: var(--font-sans);
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
 }
 
-.main-title {
-  font-family: var(--font-playfair);
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-.animate-pulse-sync {
-  animation: pulse 0.8s infinite;
+/* Subtle workspace scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.markdown-body h3 {
-  font-size: 15px;
-  margin: 18px 0 8px;
-  color: #1a1a1a;
-  border-bottom: 2px solid #f0ece4;
-  padding-bottom: 4px;
-  display: inline-block;
-  font-weight: 700;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.dark .markdown-body h3 {
-  color: #e0e0e0;
-  border-bottom-color: #333;
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
 }
 
-.markdown-body p {
-  font-size: 13px;
-  color: #444;
-  line-height: 1.6;
-  margin-bottom: 10px;
-}
-
-.dark .markdown-body p {
-  color: #a0a0a0;
-}
-
-.markdown-body ul {
-  padding-left: 20px;
-  margin-bottom: 12px;
-  list-style-type: disc;
-}
-
-.markdown-body li {
-  font-size: 13px;
-  color: #444;
-  line-height: 1.5;
-  margin-bottom: 6px;
-}
-
-.dark .markdown-body li {
-  color: #a0a0a0;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
