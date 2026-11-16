@@ -411,11 +411,14 @@ export default function App() {
     testConnection();
   }, []);
 
+  const [avatarImgError, setAvatarImgError] = useState(false);
+
   // Initialize Auth (for student workspace)
   useEffect(() => {
     if (isDummyConfig || isParentView) return;
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      setAvatarImgError(false);
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -1160,9 +1163,25 @@ export default function App() {
         {/* Brand Header */}
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-md bg-slate-900 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center font-display font-bold text-xs shrink-0">
-              UP
-            </div>
+            {!isParentView &&
+            (user?.photoURL || user?.providerData?.[0]?.photoURL) &&
+            !avatarImgError ? (
+              <img
+                src={user.photoURL || user.providerData?.[0]?.photoURL || ''}
+                alt={user.displayName || user.email || 'User profile'}
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarImgError(true)}
+                className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center font-display font-bold text-xs shrink-0">
+                {!isParentView && (user?.displayName || user?.email) ? (
+                  (user.displayName || user.email || 'U').trim().charAt(0).toUpperCase()
+                ) : (
+                  <BookOpen className="w-4 h-4" />
+                )}
+              </div>
+            )}
             <div className="min-w-0">
               <div className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
                 UP Board Class 12
