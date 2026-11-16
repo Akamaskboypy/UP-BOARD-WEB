@@ -79,20 +79,20 @@ export default function SubjectCard({
   return (
     <section
       id={id}
-      className={`bg-white dark:bg-[#111827] border transition-colors duration-150 rounded-lg overflow-hidden ${
+      className={`bg-white dark:bg-[#111827] pitch:bg-[#070709] border transition-colors duration-150 rounded-lg overflow-hidden ${
         isHighlighted
           ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500/30'
-          : 'border-slate-200 dark:border-slate-800'
+          : 'border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90'
       }`}
     >
       {/* Unit Header Bar */}
-      <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 pitch:bg-[#0B0B0E] border-b border-slate-200/80 dark:border-slate-800/80 pitch:border-zinc-800/90 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
           <button
             type="button"
             onClick={onToggleCollapse}
             aria-label={isCollapsed ? 'Expand unit' : 'Collapse unit'}
-            className="mt-0.5 p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            className="mt-0.5 p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 transition-colors cursor-pointer shrink-0"
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -102,7 +102,7 @@ export default function SubjectCard({
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               {metaParts.map((part, idx) => (
                 <span key={idx} className="inline-flex items-center gap-1.5">
-                  {idx > 0 && <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>}
+                  {idx > 0 && <span aria-hidden="true" className="text-slate-300 dark:text-slate-600 pitch:text-zinc-700">·</span>}
                   <span className={idx === metaParts.length - 1 && typeof data.marks === 'number' ? 'font-medium text-slate-700 dark:text-slate-300' : ''}>
                     {part}
                   </span>
@@ -130,7 +130,7 @@ export default function SubjectCard({
             <button
               type="button"
               onClick={() => onBulkToggle(allUnitKeys, !isAllCompleted)}
-              className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-800 pitch:bg-zinc-950 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 pitch:hover:bg-zinc-900 transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               {isAllCompleted ? 'Reset Unit' : 'Complete Unit'}
             </button>
@@ -139,7 +139,7 @@ export default function SubjectCard({
       </div>
 
       {/* Slim 2px Unit Progress Line */}
-      <div className="h-[2px] w-full bg-slate-100 dark:bg-slate-800/80 overflow-hidden">
+      <div className="h-[2px] w-full bg-slate-100 dark:bg-slate-800/80 pitch:bg-zinc-900 overflow-hidden">
         <div
           className="h-full transition-all duration-200"
           style={{
@@ -151,7 +151,7 @@ export default function SubjectCard({
 
       {/* High-Density Chapter Rows */}
       {!isCollapsed && (
-        <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800/70 pitch:divide-zinc-900">
           {visibleChapters.map((ch) => {
             const k = getChapKey(ch);
             const isChecked = Boolean(progress[k]);
@@ -164,7 +164,7 @@ export default function SubjectCard({
                   key={k}
                   className={`flex items-center justify-between gap-4 px-4 min-h-[42px] py-2 text-sm transition-colors duration-150 ${
                     isChecked
-                      ? 'bg-slate-50/40 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400'
+                      ? 'bg-slate-50/40 dark:bg-slate-900/30 pitch:bg-zinc-950/60 text-slate-500 dark:text-slate-400'
                       : 'text-slate-800 dark:text-slate-200'
                   }`}
                 >
@@ -221,10 +221,10 @@ export default function SubjectCard({
                     onToggle(k);
                   }
                 }}
-                className={`group flex items-center justify-between gap-4 px-4 min-h-[42px] py-2 text-sm transition-colors duration-150 cursor-pointer select-none focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/60 ${
+                className={`group flex items-center justify-between gap-4 px-4 min-h-[42px] py-2 text-sm transition-colors duration-150 cursor-pointer select-none focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/60 pitch:focus-visible:bg-zinc-900 ${
                   isChecked
-                    ? 'bg-slate-50/40 dark:bg-slate-900/30 text-slate-400 dark:text-slate-500'
-                    : 'hover:bg-slate-50/90 dark:hover:bg-slate-800/40 text-slate-800 dark:text-slate-200'
+                    ? 'bg-slate-50/40 dark:bg-slate-900/30 pitch:bg-zinc-950/60 text-slate-400 dark:text-slate-500'
+                    : 'hover:bg-slate-50/90 dark:hover:bg-slate-800/40 pitch:hover:bg-zinc-900/60 text-slate-800 dark:text-slate-200'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -233,7 +233,7 @@ export default function SubjectCard({
                     className={`w-4 h-4 rounded flex items-center justify-center border transition-all duration-150 shrink-0 ${
                       isChecked
                         ? 'border-transparent text-white dark:text-slate-950'
-                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-slate-400 dark:group-hover:border-slate-500'
+                        : 'border-slate-300 dark:border-slate-600 pitch:border-zinc-700 bg-white dark:bg-slate-900 pitch:bg-black group-hover:border-slate-400 dark:group-hover:border-slate-500 pitch:group-hover:border-zinc-500'
                     }`}
                     style={{
                       backgroundColor: isChecked ? accentColor : undefined,
@@ -273,7 +273,7 @@ export default function SubjectCard({
                         onStartChapterFocus(subj, ch);
                       }}
                       title={`Start focus timer for ${ch}`}
-                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all inline-flex items-center gap-1 text-[11px] font-sans font-medium cursor-pointer whitespace-nowrap shrink-0"
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-800 pitch:bg-zinc-950 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 pitch:hover:bg-zinc-900 transition-all inline-flex items-center gap-1 text-[11px] font-sans font-medium cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <Play className="w-2.5 h-2.5 fill-current" />
                       <span>Focus</span>

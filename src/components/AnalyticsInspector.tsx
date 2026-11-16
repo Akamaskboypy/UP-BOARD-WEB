@@ -108,7 +108,7 @@ export default function AnalyticsInspector({
   return (
     <aside className="space-y-4">
       {/* Exam Readiness & Marks Weightage Panel */}
-      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+      <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
             <Target className="w-3.5 h-3.5 text-slate-400" />
@@ -119,7 +119,7 @@ export default function AnalyticsInspector({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800">
+        <div className="grid grid-cols-2 gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800 pitch:border-zinc-900">
           <div>
             <div className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Estimated Coverage</div>
             <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
@@ -156,7 +156,7 @@ export default function AnalyticsInspector({
               {totalSubjectMarks > 0 ? Math.round((proportionalMarks / totalSubjectMarks) * 100) : 0}% weightage
             </span>
           </div>
-          <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 pitch:bg-zinc-900 rounded-full overflow-hidden">
             <div
               className="h-full transition-all duration-200 rounded-full"
               style={{
@@ -169,7 +169,7 @@ export default function AnalyticsInspector({
       </div>
 
       {/* High-Yield Priority Queue */}
-      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+      <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
           <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100">
             High-Weightage Priority Units
@@ -190,13 +190,13 @@ export default function AnalyticsInspector({
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/80 -mx-4">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/80 pitch:divide-zinc-900 -mx-4">
             {priorityUnits.map((u) => (
               <button
                 key={u.idx}
                 type="button"
                 onClick={() => onJumpToUnit(u.idx)}
-                className="w-full px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
+                className="w-full px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 pitch:hover:bg-zinc-900/60 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] font-mono tabular-nums text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
@@ -227,7 +227,7 @@ export default function AnalyticsInspector({
       </div>
 
       {/* Section / Branch Weightage Breakdown */}
-      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+      <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-slate-400" />
@@ -251,7 +251,7 @@ export default function AnalyticsInspector({
                     {g.doneMarks}/{g.totalMarks}M
                   </span>
                 </div>
-                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 pitch:bg-zinc-900 rounded-full overflow-hidden">
                   <div
                     className="h-full transition-all duration-200 rounded-full"
                     style={{

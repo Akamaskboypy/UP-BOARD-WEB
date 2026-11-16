@@ -63,7 +63,7 @@ export default function ShareWithParentsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="share-parents-title"
-        className="relative z-10 w-full max-w-md bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-xl space-y-5"
+        className="relative z-10 w-full max-w-md bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800 rounded-xl p-6 shadow-xl space-y-5"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -84,7 +84,7 @@ export default function ShareWithParentsModal({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -110,7 +110,7 @@ export default function ShareWithParentsModal({
                   readOnly
                   value={shareUrl}
                   onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 pitch:border-zinc-800 bg-slate-50 dark:bg-slate-900 pitch:bg-black font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
                 />
                 <button
                   type="button"
@@ -139,7 +139,7 @@ export default function ShareWithParentsModal({
             )}
 
             {/* Footer Controls: Preview + Reset Link */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 pitch:border-zinc-900 flex flex-wrap items-center justify-between gap-2">
               <a
                 href={`/parent/${shareToken}`}
                 className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
@@ -162,7 +162,7 @@ export default function ShareWithParentsModal({
                     type="button"
                     disabled={isBusy}
                     onClick={() => setConfirmReset(false)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap"
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 transition-colors cursor-pointer whitespace-nowrap"
                   >
                     Cancel
                   </button>
@@ -172,7 +172,7 @@ export default function ShareWithParentsModal({
                   type="button"
                   disabled={isBusy}
                   onClick={() => setConfirmReset(true)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-60"
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 pitch:border-zinc-800 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-60"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
                   <span>Reset Link</span>

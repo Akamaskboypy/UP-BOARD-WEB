@@ -368,9 +368,9 @@ export default function StudyTimerCalendarView({
   const getHeatmapCellClass = (seconds: number, isFuture: boolean) => {
     if (isFuture) return 'bg-transparent border-transparent pointer-events-none';
     if (seconds <= 0)
-      return 'bg-slate-100 dark:bg-slate-800/80 border-slate-200/60 dark:border-slate-800';
+      return 'bg-slate-100 dark:bg-slate-800/80 pitch:bg-zinc-950 border-slate-200/60 dark:border-slate-800 pitch:border-zinc-800/90';
     if (seconds < 45 * 60)
-      return 'bg-emerald-200 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-800';
+      return 'bg-emerald-200 dark:bg-emerald-950/90 pitch:bg-emerald-950 border-emerald-300 dark:border-emerald-800 pitch:border-emerald-800/90';
     if (seconds < 120 * 60)
       return 'bg-emerald-400 dark:bg-emerald-700 border-emerald-500 dark:border-emerald-600';
     if (seconds < 240 * 60)
@@ -382,7 +382,7 @@ export default function StudyTimerCalendarView({
     <div className="space-y-6">
       {/* Top KPI Summary Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
             <span>Studied Today</span>
             <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -395,7 +395,7 @@ export default function StudyTimerCalendarView({
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
             <span>Daily Streak</span>
             <Flame className="w-3.5 h-3.5 text-amber-500" />
@@ -408,7 +408,7 @@ export default function StudyTimerCalendarView({
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
             <span>Last 7 Days</span>
             <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
@@ -421,7 +421,7 @@ export default function StudyTimerCalendarView({
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
             <span>Cumulative Study</span>
             <Check className="w-3.5 h-3.5 text-emerald-500" />
@@ -437,18 +437,18 @@ export default function StudyTimerCalendarView({
 
       {/* Pomodoro & Stopwatch Focus Console (Hidden in Read-Only Parent View) */}
       {!readOnly && (
-        <section className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+        <section className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg overflow-hidden">
           {/* Top Mode & Preset Bar */}
-          <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-900/60 pitch:bg-[#0B0B0E] border-b border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 flex flex-wrap items-center justify-between gap-3">
             {/* Mode Switcher: Pomodoro vs Stopwatch */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+              <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 pitch:bg-zinc-900 border border-slate-200/80 dark:border-slate-700/80 pitch:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => onChangeTimerMode('pomodoro')}
                   className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timerMode === 'pomodoro'
-                      ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                      ? 'bg-white dark:bg-[#111827] pitch:bg-black text-slate-900 dark:text-white shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -459,7 +459,7 @@ export default function StudyTimerCalendarView({
                   onClick={() => onChangeTimerMode('stopwatch')}
                   className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timerMode === 'stopwatch'
-                      ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                      ? 'bg-white dark:bg-[#111827] pitch:bg-black text-slate-900 dark:text-white shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -469,7 +469,7 @@ export default function StudyTimerCalendarView({
 
               {/* Pomodoro Presets */}
               {timerMode === 'pomodoro' && (
-                <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-200/50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70">
+                <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-200/50 dark:bg-slate-800/60 pitch:bg-zinc-900/80 border border-slate-200/70 dark:border-slate-700/70 pitch:border-zinc-800">
                   {(
                     [
                       { id: '25-5', label: '25m / 5m' },
@@ -484,7 +484,7 @@ export default function StudyTimerCalendarView({
                       onClick={() => onChangePresetId(p.id)}
                       className={`px-2.5 py-1 rounded text-xs font-mono tabular-nums font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                         presetId === p.id
-                          ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                          ? 'bg-white dark:bg-[#111827] pitch:bg-black text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -499,7 +499,7 @@ export default function StudyTimerCalendarView({
             <button
               type="button"
               onClick={() => setShowManualForm(!showManualForm)}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-800 pitch:bg-zinc-900 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 pitch:hover:bg-zinc-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{showManualForm ? 'Close Manual Log' : 'Log Past Session'}</span>
@@ -508,7 +508,7 @@ export default function StudyTimerCalendarView({
 
           {/* Custom Duration Inputs (when Custom Pomodoro preset is active) */}
           {timerMode === 'pomodoro' && presetId === 'custom' && (
-            <div className="px-4 py-2.5 bg-slate-50/40 dark:bg-slate-900/30 border-b border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs">
+            <div className="px-4 py-2.5 bg-slate-50/40 dark:bg-slate-900/30 pitch:bg-[#0B0B0E] border-b border-slate-200/70 dark:border-slate-800 pitch:border-zinc-800/90 flex flex-wrap items-center gap-4 text-xs">
               <span className="font-medium text-slate-600 dark:text-slate-400">
                 Custom Pomodoro Durations:
               </span>
@@ -525,7 +525,7 @@ export default function StudyTimerCalendarView({
                       customBreakMins
                     )
                   }
-                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
+                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black font-mono tabular-nums text-xs"
                 />
               </label>
               <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
@@ -541,7 +541,7 @@ export default function StudyTimerCalendarView({
                       Math.max(1, Math.min(60, Number(e.target.value) || 5))
                     )
                   }
-                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono tabular-nums text-xs"
+                  className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black font-mono tabular-nums text-xs"
                 />
               </label>
             </div>
@@ -551,7 +551,7 @@ export default function StudyTimerCalendarView({
           {showManualForm && (
             <form
               onSubmit={handleManualSubmit}
-              className="p-4 bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+              className="p-4 bg-slate-50 dark:bg-slate-900/70 pitch:bg-[#0B0B0E] border-b border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
             >
               <div>
                 <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
@@ -562,7 +562,7 @@ export default function StudyTimerCalendarView({
                   value={manualDate}
                   max={todayStr}
                   onChange={(e) => setManualDate(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-slate-100"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black text-xs font-mono text-slate-900 dark:text-slate-100"
                 />
               </div>
 
@@ -576,7 +576,7 @@ export default function StudyTimerCalendarView({
                     setManualSubject(e.target.value as SubjectCode);
                     setManualChapter('');
                   }}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black text-xs text-slate-900 dark:text-slate-100"
                 >
                   {SUBJECTS.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -593,7 +593,7 @@ export default function StudyTimerCalendarView({
                 <select
                   value={manualChapter}
                   onChange={(e) => setManualChapter(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black text-xs text-slate-900 dark:text-slate-100"
                 >
                   <option value="">General Subject Study</option>
                   {manualChapters.map((ch) => (
@@ -615,7 +615,7 @@ export default function StudyTimerCalendarView({
                     max={16}
                     value={manualHours}
                     onChange={(e) => setManualHours(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -628,7 +628,7 @@ export default function StudyTimerCalendarView({
                     max={59}
                     value={manualMinutes}
                     onChange={(e) => setManualMinutes(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-900 pitch:bg-black text-xs font-mono tabular-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -676,11 +676,11 @@ export default function StudyTimerCalendarView({
                           className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer truncate ${
                             isSelected
                               ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-transparent'
-                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                              : 'bg-white dark:bg-slate-900 pitch:bg-black text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 pitch:border-zinc-800 hover:border-slate-300 dark:hover:border-slate-700 pitch:hover:border-zinc-700'
                           }`}
                           style={
                             isSelected
-                              ? { backgroundColor: sAccent, color: darkMode ? '#0B0F17' : '#FFFFFF' }
+                              ? { backgroundColor: sAccent, color: darkMode ? '#000000' : '#FFFFFF' }
                               : undefined
                           }
                         >
@@ -702,7 +702,7 @@ export default function StudyTimerCalendarView({
                     id="timer-chapter-select"
                     value={selectedChapter}
                     onChange={(e) => onChangeSelectedChapter(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900 text-xs md:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 pitch:border-zinc-800 bg-slate-50/70 dark:bg-slate-900 pitch:bg-black text-xs md:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 pitch:focus:border-zinc-600"
                   >
                     <option value="">General {activeSubjectObj.name} Revision</option>
                     {availableChapters.map((ch) => (
@@ -717,10 +717,10 @@ export default function StudyTimerCalendarView({
 
             {/* Right Column: Digital Clock Readout & Controls */}
             <div className="lg:col-span-7 flex flex-col items-center lg:items-end justify-center">
-              <div className="w-full max-w-md bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl p-6 text-center space-y-4">
+              <div className="w-full max-w-md bg-slate-50/80 dark:bg-slate-900/60 pitch:bg-[#0B0B0E] border border-slate-200/80 dark:border-slate-800 pitch:border-zinc-800 rounded-xl p-6 text-center space-y-4">
                 {/* Phase Switcher for Pomodoro */}
                 {timerMode === 'pomodoro' ? (
-                  <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-200/60 dark:bg-slate-800">
+                  <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-200/60 dark:bg-slate-800 pitch:bg-zinc-900">
                     {(
                       [
                         { id: 'focus', label: 'Focus Session' },
@@ -734,7 +734,7 @@ export default function StudyTimerCalendarView({
                         onClick={() => onChangePomodoroPhase(ph.id)}
                         className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                           pomodoroPhase === ph.id
-                            ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                            ? 'bg-white dark:bg-[#111827] pitch:bg-black text-slate-900 dark:text-white shadow-2xs'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
@@ -763,7 +763,7 @@ export default function StudyTimerCalendarView({
                 </div>
 
                 {/* Progress Track */}
-                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 pitch:bg-zinc-900 rounded-full overflow-hidden">
                   <div
                     className="h-full transition-all duration-200 rounded-full"
                     style={{
@@ -802,7 +802,7 @@ export default function StudyTimerCalendarView({
                   <button
                     type="button"
                     onClick={onResetTimer}
-                    className="px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                    className="px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-white dark:bg-slate-800 pitch:bg-zinc-900 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 pitch:hover:bg-zinc-800 transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset</span>
@@ -838,7 +838,7 @@ export default function StudyTimerCalendarView({
           </p>
         </div>
 
-        <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 self-start">
+        <div className="inline-flex p-1 rounded-lg bg-slate-200/70 dark:bg-slate-900 pitch:bg-zinc-900 border border-slate-200/80 dark:border-slate-800 pitch:border-zinc-800 self-start">
           {(
             [
               { id: 'both', label: 'Both Views' },
@@ -852,7 +852,7 @@ export default function StudyTimerCalendarView({
               onClick={() => setCalendarViewMode(v.id)}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 calendarViewMode === v.id
-                  ? 'bg-white dark:bg-[#111827] text-slate-900 dark:text-white shadow-2xs'
+                  ? 'bg-white dark:bg-[#111827] pitch:bg-[#070709] text-slate-900 dark:text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
@@ -868,9 +868,9 @@ export default function StudyTimerCalendarView({
         <div className="xl:col-span-8 space-y-6">
           {/* 1. Monthly Calendar Grid */}
           {(calendarViewMode === 'both' || calendarViewMode === 'monthly') && (
-            <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+            <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg overflow-hidden">
               {/* Calendar Header */}
-              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <h3 className="font-display font-bold text-sm md:text-base text-slate-900 dark:text-slate-100">
                     {calendarMonth.toLocaleDateString('en-US', {
@@ -892,7 +892,7 @@ export default function StudyTimerCalendarView({
                       )
                     }
                     aria-label="Previous month"
-                    className="p-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                    className="p-1.5 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 text-slate-600 dark:text-slate-300 cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -903,7 +903,7 @@ export default function StudyTimerCalendarView({
                       setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
                       setSelectedDate(todayStr);
                     }}
-                    className="px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer whitespace-nowrap"
+                    className="px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer whitespace-nowrap"
                   >
                     Today
                   </button>
@@ -915,7 +915,7 @@ export default function StudyTimerCalendarView({
                       )
                     }
                     aria-label="Next month"
-                    className="p-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                    className="p-1.5 rounded border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 hover:bg-slate-100 dark:hover:bg-slate-800 pitch:hover:bg-zinc-900 text-slate-600 dark:text-slate-300 cursor-pointer"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -923,7 +923,7 @@ export default function StudyTimerCalendarView({
               </div>
 
               {/* Weekday Column Headers */}
-              <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 text-[11px] font-mono text-slate-500 dark:text-slate-400 text-center py-2">
+              <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 bg-slate-50/60 dark:bg-slate-900/50 pitch:bg-[#0B0B0E] text-[11px] font-mono text-slate-500 dark:text-slate-400 text-center py-2">
                 <div>Mon</div>
                 <div>Tue</div>
                 <div>Wed</div>
@@ -934,7 +934,7 @@ export default function StudyTimerCalendarView({
               </div>
 
               {/* 7-Column Day Grid */}
-              <div className="grid grid-cols-7 divide-x divide-y divide-slate-100 dark:divide-slate-800/80">
+              <div className="grid grid-cols-7 divide-x divide-y divide-slate-100 dark:divide-slate-800/80 pitch:divide-zinc-900">
                 {monthlyCells.map((cell) => {
                   const isToday = cell.dateStr === todayStr;
                   const isSelected = cell.dateStr === selectedDate;
@@ -947,12 +947,12 @@ export default function StudyTimerCalendarView({
                       onClick={() => setSelectedDate(cell.dateStr)}
                       className={`min-h-[78px] sm:min-h-[88px] p-2 flex flex-col justify-between text-left transition-colors cursor-pointer relative ${
                         !cell.inCurrentMonth
-                          ? 'bg-slate-50/40 dark:bg-slate-950/30 text-slate-400 dark:text-slate-600'
-                          : 'bg-white dark:bg-[#111827] text-slate-800 dark:text-slate-200'
+                          ? 'bg-slate-50/40 dark:bg-slate-950/30 pitch:bg-black/70 text-slate-400 dark:text-slate-600'
+                          : 'bg-white dark:bg-[#111827] pitch:bg-[#070709] text-slate-800 dark:text-slate-200'
                       } ${
                         isSelected
-                          ? 'ring-2 ring-inset ring-blue-600 dark:ring-blue-400 bg-blue-50/20 dark:bg-blue-950/20'
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                          ? 'ring-2 ring-inset ring-blue-600 dark:ring-blue-400 bg-blue-50/20 dark:bg-blue-950/20 pitch:bg-blue-950/30'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 pitch:hover:bg-zinc-900/60'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
@@ -976,7 +976,7 @@ export default function StudyTimerCalendarView({
                       {/* Subject Breakdown Stacked Horizontal Bar inside the Day Cell */}
                       {hasStudy ? (
                         <div className="w-full space-y-1 mt-2">
-                          <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800">
+                          <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800 pitch:bg-zinc-900">
                             {SUBJECTS.map((s) => {
                               const sec = cell.bySubject[s.id] || 0;
                               if (sec <= 0) return null;
@@ -1015,7 +1015,7 @@ export default function StudyTimerCalendarView({
 
           {/* 2. GitHub-Style Yearly / Multi-Month Activity Heatmap */}
           {(calendarViewMode === 'both' || calendarViewMode === 'heatmap') && (
-            <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4 md:p-5 space-y-4">
+            <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4 md:p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100">
@@ -1030,7 +1030,7 @@ export default function StudyTimerCalendarView({
                 {/* Intensity Legend */}
                 <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400 dark:text-slate-500">
                   <span>Less</span>
-                  <span className="w-3 h-3 rounded-xs bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700" />
+                  <span className="w-3 h-3 rounded-xs bg-slate-100 dark:bg-slate-800 pitch:bg-zinc-950 border border-slate-200/60 dark:border-slate-700 pitch:border-zinc-800/90" />
                   <span className="w-3 h-3 rounded-xs bg-emerald-200 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800" />
                   <span className="w-3 h-3 rounded-xs bg-emerald-400 dark:bg-emerald-700" />
                   <span className="w-3 h-3 rounded-xs bg-emerald-500 dark:bg-emerald-500" />
@@ -1098,9 +1098,9 @@ export default function StudyTimerCalendarView({
 
         {/* Right 4 Columns: Selected Date Inspector Panel */}
         <aside className="xl:col-span-4 xl:sticky xl:top-20 space-y-4">
-          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-4">
+          <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-slate-200 dark:border-slate-800 pitch:border-zinc-800/90 rounded-lg p-4 space-y-4">
             {/* Selected Date Header */}
-            <div className="pb-3 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-2">
+            <div className="pb-3 border-b border-slate-100 dark:border-slate-800 pitch:border-zinc-900 flex items-start justify-between gap-2">
               <div>
                 <div className="text-xs font-mono text-slate-400 dark:text-slate-500">
                   {selectedDate === todayStr ? 'Today · Daily Study Log' : 'Selected Date Log'}
@@ -1128,7 +1128,7 @@ export default function StudyTimerCalendarView({
 
             {/* Subject Breakdown for Selected Day */}
             {selectedDayData.totalSeconds > 0 && (
-              <div className="space-y-2.5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="space-y-2.5 pb-3 border-b border-slate-100 dark:border-slate-800 pitch:border-zinc-900">
                 <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Subject Time Breakdown
                 </div>
@@ -1148,7 +1148,7 @@ export default function StudyTimerCalendarView({
                           {formatDurationHuman(sec)} · {pct}%
                         </span>
                       </div>
-                      <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 pitch:bg-zinc-900 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-200"
                           style={{ width: `${pct}%`, backgroundColor: sAccent }}
@@ -1181,7 +1181,7 @@ export default function StudyTimerCalendarView({
               </div>
 
               {selectedDayData.sessions.length === 0 ? (
-                <div className="py-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg px-4">
+                <div className="py-8 text-center border border-dashed border-slate-200 dark:border-slate-800 pitch:border-zinc-800 rounded-lg px-4">
                   <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                     No study sessions logged on this date
                   </p>
@@ -1192,7 +1192,7 @@ export default function StudyTimerCalendarView({
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800/80 max-h-80 overflow-y-auto -mx-4 px-4">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/80 pitch:divide-zinc-900 max-h-80 overflow-y-auto -mx-4 px-4">
                   {selectedDayData.sessions
                     .slice()
                     .reverse()

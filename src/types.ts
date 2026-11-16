@@ -20,6 +20,7 @@ export interface ProgressState {
 export type TimerMode = 'pomodoro' | 'stopwatch';
 export type PomodoroPhase = 'focus' | 'shortBreak' | 'longBreak';
 export type PomodoroPresetId = '25-5' | '50-10' | '90-15' | 'custom';
+export type ThemeMode = 'light' | 'dark' | 'pitch';
 
 export interface StudySessionLog {
   id: string;

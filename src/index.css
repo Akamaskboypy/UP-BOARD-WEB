@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant pitch (&:is(.pitch, .pitch *));
 
 @theme {
   --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -22,6 +23,14 @@
   --border-subtle: #1E293B;
   --text-primary: #F8FAFC;
   --text-secondary: #94A3B8;
+}
+
+.pitch {
+  --bg-canvas: #000000;
+  --bg-surface: #070709;
+  --border-subtle: #18181B;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
 }
 
 body {
