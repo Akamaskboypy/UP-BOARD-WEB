@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icon.svg'],
+        includeAssets: ['upboardlogo.png', 'icon.svg'],
         devOptions: {
           enabled: true
         },
@@ -24,6 +24,12 @@ export default defineConfig(({mode}) => {
           background_color: '#f0ece4',
           display: 'standalone',
           icons: [
+            {
+              src: '/upboardlogo.png',
+              sizes: '554x554',
+              type: 'image/png',
+              purpose: 'any'
+            },
             {
               src: 'icon.svg',
               sizes: '192x192',
