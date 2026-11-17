@@ -263,6 +263,144 @@ function getPresetDurations(
   }
 }
 
+const ACTIVE_TIMER_STORAGE_KEY = 'upboard_active_timer';
+const STOPWATCH_STALE_CLOSE_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+interface PersistedTimerState {
+  timerMode: TimerMode;
+  pomodoroPhase: PomodoroPhase;
+  presetId: PomodoroPresetId;
+  customFocusMins: number;
+  customBreakMins: number;
+  timerSubject: SubjectCode;
+  timerChapter: string;
+  isRunning: boolean;
+  accumulatedSeconds: number;
+  runStartedAtMs: number | null;
+  lastHeartbeatMs: number;
+}
+
+interface RecoveredStopwatchSession {
+  seconds: number;
+  subjectId: SubjectCode;
+  chapter: string;
+  closedAtMs: number;
+}
+
+function loadInitialTimerState(): PersistedTimerState & {
+  recoveredStopwatch: RecoveredStopwatchSession | null;
+} {
+  const defaults: PersistedTimerState & { recoveredStopwatch: RecoveredStopwatchSession | null } = {
+    timerMode: 'pomodoro',
+    pomodoroPhase: 'focus',
+    presetId: '25-5',
+    customFocusMins: 25,
+    customBreakMins: 5,
+    timerSubject: 'phy',
+    timerChapter: '',
+    isRunning: false,
+    accumulatedSeconds: 0,
+    runStartedAtMs: null,
+    lastHeartbeatMs: Date.now(),
+    recoveredStopwatch: null,
+  };
+
+  try {
+    const raw = localStorage.getItem(ACTIVE_TIMER_STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<PersistedTimerState>;
+
+    const timerMode: TimerMode =
+      parsed.timerMode === 'stopwatch' || parsed.timerMode === 'pomodoro'
+        ? parsed.timerMode
+        : 'pomodoro';
+    const pomodoroPhase: PomodoroPhase =
+      parsed.pomodoroPhase === 'focus' ||
+      parsed.pomodoroPhase === 'shortBreak' ||
+      parsed.pomodoroPhase === 'longBreak'
+        ? parsed.pomodoroPhase
+        : 'focus';
+    const presetId: PomodoroPresetId =
+      parsed.presetId === '25-5' ||
+      parsed.presetId === '50-10' ||
+      parsed.presetId === '90-15' ||
+      parsed.presetId === 'custom'
+        ? parsed.presetId
+        : '25-5';
+    const customFocusMins =
+      typeof parsed.customFocusMins === 'number' && parsed.customFocusMins >= 1
+        ? Math.min(180, Math.round(parsed.customFocusMins))
+        : 25;
+    const customBreakMins =
+      typeof parsed.customBreakMins === 'number' && parsed.customBreakMins >= 1
+        ? Math.min(60, Math.round(parsed.customBreakMins))
+        : 5;
+    const validSubjects: SubjectCode[] = ['phy', 'chem', 'math', 'eng', 'hin'];
+    const timerSubject: SubjectCode = validSubjects.includes(parsed.timerSubject as SubjectCode)
+      ? (parsed.timerSubject as SubjectCode)
+      : 'phy';
+    const timerChapter = typeof parsed.timerChapter === 'string' ? parsed.timerChapter : '';
+    let accumulatedSeconds =
+      typeof parsed.accumulatedSeconds === 'number' && parsed.accumulatedSeconds >= 0
+        ? Math.floor(parsed.accumulatedSeconds)
+        : 0;
+    let isRunning = Boolean(parsed.isRunning);
+    let runStartedAtMs =
+      isRunning && typeof parsed.runStartedAtMs === 'number' && parsed.runStartedAtMs > 0
+        ? parsed.runStartedAtMs
+        : null;
+    if (isRunning && !runStartedAtMs) {
+      isRunning = false;
+    }
+    const lastHeartbeatMs =
+      typeof parsed.lastHeartbeatMs === 'number' && parsed.lastHeartbeatMs > 0
+        ? parsed.lastHeartbeatMs
+        : runStartedAtMs || Date.now();
+
+    let recoveredStopwatch: RecoveredStopwatchSession | null = null;
+    const now = Date.now();
+
+    // If a stopwatch was left running when the app closed for > 4 hours, pause at the
+    // last active timestamp before close so elapsed time isn't lost or inflated overnight.
+    if (
+      timerMode === 'stopwatch' &&
+      isRunning &&
+      runStartedAtMs &&
+      now - lastHeartbeatMs > STOPWATCH_STALE_CLOSE_MS
+    ) {
+      const preCloseDelta = Math.max(0, Math.floor((lastHeartbeatMs - runStartedAtMs) / 1000));
+      accumulatedSeconds = accumulatedSeconds + preCloseDelta;
+      isRunning = false;
+      runStartedAtMs = null;
+      if (accumulatedSeconds >= 1) {
+        recoveredStopwatch = {
+          seconds: accumulatedSeconds,
+          subjectId: timerSubject,
+          chapter: timerChapter,
+          closedAtMs: lastHeartbeatMs,
+        };
+      }
+    }
+
+    return {
+      timerMode,
+      pomodoroPhase,
+      presetId,
+      customFocusMins,
+      customBreakMins,
+      timerSubject,
+      timerChapter,
+      isRunning,
+      accumulatedSeconds,
+      runStartedAtMs,
+      lastHeartbeatMs,
+      recoveredStopwatch,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 export default function App() {
   // Detect /parent/[token] route
   const parentRouteToken = useMemo(() => {
@@ -348,18 +486,36 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [confirmResetSubject, setConfirmResetSubject] = useState(false);
 
-  // Persistent Drift-Free Timer Engine State
-  const [timerMode, setTimerMode] = useState<TimerMode>('pomodoro');
-  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('focus');
-  const [presetId, setPresetId] = useState<PomodoroPresetId>('25-5');
-  const [customFocusMins, setCustomFocusMins] = useState<number>(25);
-  const [customBreakMins, setCustomBreakMins] = useState<number>(5);
-  const [timerSubject, setTimerSubject] = useState<SubjectCode>('phy');
-  const [timerChapter, setTimerChapter] = useState<string>('');
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [accumulatedSeconds, setAccumulatedSeconds] = useState<number>(0);
-  const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(null);
+  // Persistent Drift-Free Timer Engine State (restored across reloads & closes)
+  const [initialTimer] = useState(() => (isParentView ? null : loadInitialTimerState()));
+  const [timerMode, setTimerMode] = useState<TimerMode>(initialTimer?.timerMode ?? 'pomodoro');
+  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>(
+    initialTimer?.pomodoroPhase ?? 'focus'
+  );
+  const [presetId, setPresetId] = useState<PomodoroPresetId>(initialTimer?.presetId ?? '25-5');
+  const [customFocusMins, setCustomFocusMins] = useState<number>(
+    initialTimer?.customFocusMins ?? 25
+  );
+  const [customBreakMins, setCustomBreakMins] = useState<number>(
+    initialTimer?.customBreakMins ?? 5
+  );
+  const [timerSubject, setTimerSubject] = useState<SubjectCode>(
+    initialTimer?.timerSubject ?? 'phy'
+  );
+  const [timerChapter, setTimerChapter] = useState<string>(initialTimer?.timerChapter ?? '');
+  const [isRunning, setIsRunning] = useState<boolean>(initialTimer?.isRunning ?? false);
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState<number>(
+    initialTimer?.accumulatedSeconds ?? 0
+  );
+  const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(
+    initialTimer?.runStartedAtMs ?? null
+  );
   const [tickNowMs, setTickNowMs] = useState<number>(() => Date.now());
+  const [cloudHydrated, setCloudHydrated] = useState<boolean>(isDummyConfig || isParentView);
+  const [timerRecoveryNotice, setTimerRecoveryNotice] = useState<string | null>(null);
+  const [recoveredStopwatch, setRecoveredStopwatch] = useState<RecoveredStopwatchSession | null>(
+    initialTimer?.recoveredStopwatch ?? null
+  );
 
   const durations = useMemo(
     () => getPresetDurations(presetId, customFocusMins, customBreakMins),
@@ -445,6 +601,9 @@ export default function App() {
     if (isDummyConfig || isParentView) return;
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if (!u) {
+        setCloudHydrated(false);
+      }
       setAvatarImgError(false);
       setIsAuthReady(true);
     });
@@ -563,10 +722,12 @@ export default function App() {
         } else {
           setSyncStatus({ status: 'synced', text: 'Cloud Ready' });
         }
+        setCloudHydrated(true);
       },
       (error) => {
         logFirestoreError(error, OperationType.GET, docPath);
         setSyncStatus({ status: 'error', text: 'Sync failed' });
+        setCloudHydrated(true);
       }
     );
 
@@ -599,10 +760,10 @@ export default function App() {
 
   // Ensure existing parentShareToken document stays synced when student opens the app
   useEffect(() => {
-    if (isParentView || !parentShareToken) return;
+    if (isParentView || !parentShareToken || !cloudHydrated) return;
     if (!isDummyConfig && (!user || !isAuthReady)) return;
     syncSharedProgressInBackground(parentShareToken, progress, studyLogs);
-  }, [parentShareToken, user, isAuthReady, isParentView]);
+  }, [parentShareToken, user, isAuthReady, isParentView, cloudHydrated]);
 
   const saveWorkspaceToCloud = useCallback(
     async (
@@ -715,18 +876,32 @@ export default function App() {
   };
 
   const appendStudyLog = useCallback(
-    (entry: Omit<StudySessionLog, 'id' | 'completedAt'>) => {
+    (entry: Omit<StudySessionLog, 'id' | 'completedAt'> & { completedAt?: string }) => {
       if (isParentView) return;
+      const completedAtIso = entry.completedAt || new Date().toISOString();
+      // Guard against duplicate logs (e.g. StrictMode double-effect on offline recovery)
+      if (
+        entry.completedAt &&
+        studyLogsRef.current.some(
+          (l) =>
+            l.completedAt === completedAtIso &&
+            l.subjectId === entry.subjectId &&
+            l.mode === entry.mode
+        )
+      ) {
+        return;
+      }
       const newLog: StudySessionLog = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         date: entry.date,
         subjectId: entry.subjectId,
         durationSeconds: Math.max(1, Math.round(entry.durationSeconds)),
         mode: entry.mode,
-        completedAt: new Date().toISOString(),
+        completedAt: completedAtIso,
         ...(entry.chapter ? { chapter: entry.chapter } : {}),
       };
       const updated = [...studyLogsRef.current, newLog];
+      studyLogsRef.current = updated;
       setStudyLogs(updated);
       saveWorkspaceToCloud(progressRef.current, updated);
     },
@@ -737,11 +912,89 @@ export default function App() {
     (id: string) => {
       if (isParentView) return;
       const updated = studyLogsRef.current.filter((l) => l.id !== id);
+      studyLogsRef.current = updated;
       setStudyLogs(updated);
       saveWorkspaceToCloud(progressRef.current, updated);
     },
     [saveWorkspaceToCloud, isParentView]
   );
+
+  // Keep a synchronous ref of the active timer state so pagehide/beforeunload never lose progress
+  const timerSnapshotRef = useRef<Omit<PersistedTimerState, 'lastHeartbeatMs'>>({
+    timerMode,
+    pomodoroPhase,
+    presetId,
+    customFocusMins,
+    customBreakMins,
+    timerSubject,
+    timerChapter,
+    isRunning,
+    accumulatedSeconds,
+    runStartedAtMs,
+  });
+  timerSnapshotRef.current = {
+    timerMode,
+    pomodoroPhase,
+    presetId,
+    customFocusMins,
+    customBreakMins,
+    timerSubject,
+    timerChapter,
+    isRunning,
+    accumulatedSeconds,
+    runStartedAtMs,
+  };
+
+  const persistActiveTimerNow = useCallback(() => {
+    if (isParentView) return;
+    try {
+      const payload: PersistedTimerState = {
+        ...timerSnapshotRef.current,
+        lastHeartbeatMs: Date.now(),
+      };
+      localStorage.setItem(ACTIVE_TIMER_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [isParentView]);
+
+  // Persist active timer state whenever any timer setting or running state changes
+  useEffect(() => {
+    persistActiveTimerNow();
+  }, [
+    timerMode,
+    pomodoroPhase,
+    presetId,
+    customFocusMins,
+    customBreakMins,
+    timerSubject,
+    timerChapter,
+    isRunning,
+    accumulatedSeconds,
+    runStartedAtMs,
+    persistActiveTimerNow,
+  ]);
+
+  // Periodically refresh heartbeat while running and flush on tab close / app switch
+  useEffect(() => {
+    if (isParentView) return;
+    const handleFlush = () => persistActiveTimerNow();
+    window.addEventListener('pagehide', handleFlush);
+    window.addEventListener('beforeunload', handleFlush);
+    document.addEventListener('visibilitychange', handleFlush);
+
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+    if (isRunning) {
+      heartbeatInterval = setInterval(handleFlush, 2000);
+    }
+
+    return () => {
+      window.removeEventListener('pagehide', handleFlush);
+      window.removeEventListener('beforeunload', handleFlush);
+      document.removeEventListener('visibilitychange', handleFlush);
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  }, [isRunning, isParentView, persistActiveTimerNow]);
 
   // Wall-clock 250ms tick interval for drift-free Pomodoro & Stopwatch tracking
   useEffect(() => {
@@ -753,24 +1006,41 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRunning, isParentView]);
 
-  // Detect automatic Pomodoro countdown completion
+  // Detect automatic Pomodoro countdown completion (including sessions that finished while app was closed)
   useEffect(() => {
-    if (!isRunning || timerMode !== 'pomodoro' || isParentView) return;
+    if (!isRunning || timerMode !== 'pomodoro' || isParentView || !cloudHydrated) return;
     if (totalElapsedSeconds >= targetSeconds && targetSeconds > 0) {
-      playCompletionChime();
+      const remainingAtRunStart = Math.max(0, targetSeconds - accumulatedSeconds);
+      const finishMs = runStartedAtMs
+        ? Math.min(Date.now(), runStartedAtMs + remainingAtRunStart * 1000)
+        : Date.now();
+      const completedWhileClosed = Date.now() - finishMs > 5000;
+
+      if (!completedWhileClosed) {
+        playCompletionChime();
+      }
       setIsRunning(false);
       setRunStartedAtMs(null);
       setAccumulatedSeconds(0);
 
       if (pomodoroPhase === 'focus') {
+        const subjObj = SUBJECTS.find((s) => s.id === timerSubject);
         appendStudyLog({
-          date: getLocalDateString(),
+          date: getLocalDateString(new Date(finishMs)),
           subjectId: timerSubject,
           ...(timerChapter ? { chapter: timerChapter } : {}),
           durationSeconds: targetSeconds,
           mode: 'pomodoro',
+          completedAt: new Date(finishMs).toISOString(),
         });
         setPomodoroPhase('shortBreak');
+        if (completedWhileClosed) {
+          setTimerRecoveryNotice(
+            `Logged completed ${formatDurationHuman(targetSeconds)} Pomodoro session (${
+              subjObj?.name || timerSubject.toUpperCase()
+            }${timerChapter ? ` · ${timerChapter}` : ''}) that finished while the app was closed.`
+          );
+        }
       } else {
         setPomodoroPhase('focus');
       }
@@ -780,16 +1050,21 @@ export default function App() {
     timerMode,
     totalElapsedSeconds,
     targetSeconds,
+    accumulatedSeconds,
+    runStartedAtMs,
     pomodoroPhase,
     timerSubject,
     timerChapter,
     appendStudyLog,
     isParentView,
+    cloudHydrated,
   ]);
 
   // Timer Control Handlers
   const handleStartPauseTimer = () => {
     if (isParentView) return;
+    setRecoveredStopwatch(null);
+    setTimerRecoveryNotice(null);
     if (isRunning) {
       const now = Date.now();
       const delta = runStartedAtMs ? Math.max(0, Math.floor((now - runStartedAtMs) / 1000)) : 0;
@@ -805,6 +1080,8 @@ export default function App() {
   };
 
   const handleResetTimer = () => {
+    setRecoveredStopwatch(null);
+    setTimerRecoveryNotice(null);
     setIsRunning(false);
     setRunStartedAtMs(null);
     setAccumulatedSeconds(0);
@@ -813,24 +1090,31 @@ export default function App() {
   const handleFinishAndLogSession = () => {
     if (isParentView) return;
     const durationToLog = elapsedFocusSeconds;
+    const logMeta = recoveredStopwatch;
+    setRecoveredStopwatch(null);
+    setTimerRecoveryNotice(null);
     setIsRunning(false);
     setRunStartedAtMs(null);
     setAccumulatedSeconds(0);
 
     if (durationToLog >= 1) {
       playCompletionChime();
+      const completedDate = logMeta ? new Date(logMeta.closedAtMs) : new Date();
       appendStudyLog({
-        date: getLocalDateString(),
+        date: getLocalDateString(completedDate),
         subjectId: timerSubject,
         ...(timerChapter ? { chapter: timerChapter } : {}),
         durationSeconds: durationToLog,
         mode: timerMode,
+        ...(logMeta ? { completedAt: completedDate.toISOString() } : {}),
       });
     }
   };
 
   const handleStartChapterFocusFromCard = (subj: SubjectCode, chapter: string) => {
     if (isParentView) return;
+    setRecoveredStopwatch(null);
+    setTimerRecoveryNotice(null);
     setTimerSubject(subj);
     setTimerChapter(chapter);
     if (timerMode === 'pomodoro' && pomodoroPhase !== 'focus') {
@@ -1653,6 +1937,68 @@ export default function App() {
 
         {/* Main Viewport Container */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] w-full mx-auto space-y-6">
+          {/* Recovered / Offline-Completed Session Banners */}
+          {!isParentView && recoveredStopwatch && (
+            <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-amber-300/80 dark:border-amber-700/60 pitch:border-amber-700/50 rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Timer className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                  Recovered{' '}
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                    {formatDurationHuman(recoveredStopwatch.seconds)}
+                  </span>{' '}
+                  unfinished stopwatch session (
+                  {SUBJECTS.find((s) => s.id === recoveredStopwatch.subjectId)?.name ||
+                    recoveredStopwatch.subjectId}
+                  {recoveredStopwatch.chapter ? ` · ${recoveredStopwatch.chapter}` : ''}) from before
+                  the app closed.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleFinishAndLogSession}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Log {formatDurationHuman(recoveredStopwatch.seconds)}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartPauseTimer}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 pitch:border-zinc-800 bg-slate-50 dark:bg-slate-800 pitch:bg-zinc-900 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 pitch:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetTimer}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isParentView && timerRecoveryNotice && (
+            <div className="bg-white dark:bg-[#111827] pitch:bg-[#070709] border border-emerald-300/80 dark:border-emerald-800/60 rounded-lg px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                  {timerRecoveryNotice}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTimerRecoveryNotice(null)}
+                aria-label="Dismiss notification"
+                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {workspaceView === 'timer_calendar' ? (
             <StudyTimerCalendarView
               darkMode={isDark}
